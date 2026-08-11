@@ -638,7 +638,7 @@ namespace NetworkScannerTool
 
         public MainForm()
         {
-            Text = "Network Scanner Tool v1.1";
+            Text = "Network Scanner Tool v1.2";
 
             // EXE içine gömülü ikonu pencere ve görev çubuğunda da kullan.
             using (var iconStream = System.Reflection.Assembly.GetExecutingAssembly()
@@ -939,7 +939,7 @@ namespace NetworkScannerTool
             footer.Size = new Size(942, 24);
 
             footer.Text =
-                "tuncay   •   candan.net.tr";
+                "tuncay   •   tuncay.net.tr";
 
             footer.TextAlign = ContentAlignment.MiddleCenter;
 
@@ -963,16 +963,16 @@ namespace NetworkScannerTool
             footer.LinkBehavior =
                 LinkBehavior.HoverUnderline;
 
-            // Sadece candan.net.tr tıklanabilir
+            // Sadece tuncay.net.tr tıklanabilir
             int linkStart =
-                footer.Text.IndexOf("candan.net.tr");
+                footer.Text.IndexOf("tuncay.net.tr");
 
             footer.Links.Clear();
 
             footer.Links.Add(
                 linkStart,
-                "candan.net.tr".Length,
-                "https://candan.net.tr");
+                "tuncay.net.tr".Length,
+                "https://tuncay.net.tr");
 
             footer.LinkClicked += (s, e) =>
             {
