@@ -51,11 +51,11 @@ Precompiled Windows versions are available from the Releases section.
 
 ### 🇬🇧 English Interface
 
-![Network Scanner Tool - English](eng.png)
+![Network Scanner Tool - English](eng_ss.png)
 
 ### 🇹🇷 Türkçe Arayüz
 
-![Network Scanner Tool - Türkçe](tr.png)
+![Network Scanner Tool - Türkçe](tr_ss.png)
 
 ---
 
