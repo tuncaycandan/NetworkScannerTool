@@ -203,9 +203,11 @@ GitHub: [@tuncaycandan](https://github.com/tuncaycandan)
 
 ---
 
-## 📄 License
+## License
 
-This project is licensed under the **MIT License**.
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+
+You are free to use, study, modify, and distribute this software under the terms of the GPL-3.0 license.
 
 See the [LICENSE](LICENSE) file for details.
 
