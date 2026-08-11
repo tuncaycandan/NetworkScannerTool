@@ -47,9 +47,15 @@ Precompiled Windows versions are available from the Releases section.
 
 ---
 
-## 🖼️ Screenshot
+## 🖼️ Screenshots
 
-Screenshot coming soon.
+### 🇬🇧 English Interface
+
+![Network Scanner Tool - English](eng.png)
+
+### 🇹🇷 Türkçe Arayüz
+
+![Network Scanner Tool - Türkçe](tr.png)
 
 ---
 
