@@ -197,7 +197,7 @@ When reporting a problem, please include:
 
 **Tuncay Candan**
 
-🌐 https://www.candan.net.tr
+🌐 https://www.tuncay.net.tr
 
 GitHub: [@tuncaycandan](https://github.com/tuncaycandan)
 
