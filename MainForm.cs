@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -363,7 +364,35 @@ namespace NetworkScannerTool
         private readonly ComboBox deviceTypeFilter = new ComboBox();
         private readonly ComboBox languageCombo = new ComboBox();
         private readonly Label languageLabel = new Label();
+        private readonly ComboBox themeCombo = new ComboBox();
+        private readonly Label themeLabel = new Label();
+        private readonly Button updateButton = new Button();
         private bool englishMode = false;
+        private bool darkMode = false;
+        private bool startupUpdateCheckDone = false;
+
+        // Sürüm AssemblyInfo.cs içindeki AssemblyVersion değerinden alınır.
+        // Örnek: [assembly: AssemblyVersion("1.2.0.0")] -> 1.2
+        private static string CurrentVersion
+        {
+            get
+            {
+                var version = System.Reflection.Assembly
+                    .GetExecutingAssembly()
+                    .GetName()
+                    .Version;
+
+                return version == null ? "0.0" : version.ToString(2);
+            }
+        }
+
+        private const string GitHubOwner = "tuncaycandan";
+        private const string GitHubRepo = "NetworkScannerTool";
+
+        private readonly HttpClient updateHttp = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(12)
+        };
 
         private readonly List<AdapterInfo> adapters = new List<AdapterInfo>();
         private readonly List<DeviceInfo> scanResults = new List<DeviceInfo>();
@@ -536,6 +565,13 @@ namespace NetworkScannerTool
             exportButton.Text = T("CSV Dışa Aktar", "Export CSV");
             scanPortsButton.Text = T("Portları Tara", "Scan Ports");
             scanSharesButton.Text = T("Paylaşımları Tara", "Scan Shares");
+            updateButton.Text = T("Güncellemeyi Denetle", "Check for Updates");
+
+            themeLabel.Text = T("Tema:", "Theme:");
+            themeCombo.Items.Clear();
+            themeCombo.Items.Add(T("Açık", "Light"));
+            themeCombo.Items.Add(T("Koyu", "Dark"));
+            themeCombo.SelectedIndex = darkMode ? 1 : 0;
 
             languageLabel.Text = T("Dil:", "Language:");
             languageLabel.Location = new Point(765, 83);
@@ -616,6 +652,8 @@ namespace NetworkScannerTool
             RefreshDeviceTypeFilterItems();
             ApplyDeviceTypeFilter();
 
+            ApplyTheme();
+
             var selected = GetSelectedDevice();
             if (selected != null)
             {
@@ -638,7 +676,12 @@ namespace NetworkScannerTool
 
         public MainForm()
         {
-            Text = "Network Scanner Tool v1.2";
+            Text = "Network Scanner Tool v" + CurrentVersion;
+
+            // Türkçe Windows -> Türkçe, diğer tüm Windows dilleri -> English
+            englishMode = !CultureInfo.CurrentUICulture.Name.StartsWith(
+                "tr",
+                StringComparison.OrdinalIgnoreCase);
 
             // EXE içine gömülü ikonu pencere ve görev çubuğunda da kullan.
             using (var iconStream = System.Reflection.Assembly.GetExecutingAssembly()
@@ -653,6 +696,12 @@ namespace NetworkScannerTool
             MaximizeBox = false;
             Font = new Font("Segoe UI", 9F);
             BackColor = Color.FromArgb(247, 248, 250);
+
+            // DPI ölçeklendirme: %125 / %150 gibi Windows ölçeklerinde
+            // WinForms kontrollerinin daha düzgün ölçeklenmesini sağlar.
+            AutoScaleMode = AutoScaleMode.Dpi;
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            MinimumSize = new Size(996, 694);
 
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             try
@@ -684,6 +733,19 @@ namespace NetworkScannerTool
             gokturkLogo.BringToFront();
 
             LoadAdapters();
+            ApplyLanguage();
+
+            // Program açıldıktan 3 saniye sonra sessizce güncelleme kontrolü yap.
+            Shown += async (s, e) =>
+            {
+                if (startupUpdateCheckDone)
+                    return;
+
+                startupUpdateCheckDone = true;
+
+                await Task.Delay(3000);
+                await CheckForUpdatesAsync(true);
+            };
         }
 
         private void BuildUi()
@@ -786,6 +848,26 @@ namespace NetworkScannerTool
 
             Controls.Add(deviceTypeFilter);
 
+            themeLabel.Text = "Tema:";
+            themeLabel.Location = new Point(600, 83);
+            themeLabel.Size = new Size(55, 22);
+            themeLabel.TextAlign = ContentAlignment.MiddleRight;
+            themeLabel.Font = new Font(Font, FontStyle.Bold);
+            Controls.Add(themeLabel);
+
+            themeCombo.Location = new Point(660, 82);
+            themeCombo.Size = new Size(95, 24);
+            themeCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+            themeCombo.Items.Add("Açık");
+            themeCombo.Items.Add("Koyu");
+            themeCombo.SelectedIndex = darkMode ? 1 : 0;
+            themeCombo.SelectedIndexChanged += (s, e) =>
+            {
+                darkMode = themeCombo.SelectedIndex == 1;
+                ApplyTheme();
+            };
+            Controls.Add(themeCombo);
+
             languageLabel.Text = "Dil:";
             languageLabel.Location = new Point(765, 83);
             languageLabel.Size = new Size(70, 22);
@@ -798,7 +880,7 @@ namespace NetworkScannerTool
             languageCombo.DropDownStyle = ComboBoxStyle.DropDownList;
             languageCombo.Items.Add("Türkçe");
             languageCombo.Items.Add("English");
-            languageCombo.SelectedIndex = 0;
+            languageCombo.SelectedIndex = englishMode ? 1 : 0;
             languageCombo.SelectedIndexChanged += (s, e) =>
             {
                 englishMode = languageCombo.SelectedIndex == 1;
@@ -934,6 +1016,15 @@ namespace NetworkScannerTool
             footerLine.BackColor = Color.FromArgb(220, 224, 230);
             Controls.Add(footerLine);
 
+            // Güncelleme butonu - sol alt
+            updateButton.Text = T("Güncellemeyi Denetle", "Check for Updates");
+            updateButton.Location = new Point(18, 618);
+            updateButton.Size = new Size(155, 27);
+            updateButton.Font = new Font("Segoe UI", 8.5F, FontStyle.Regular);
+            updateButton.Click += async (s, e) => await CheckForUpdatesAsync(false);
+            Controls.Add(updateButton);
+            updateButton.BringToFront();
+
             // Footer
             footer.Location = new Point(18, 620);
             footer.Size = new Size(942, 24);
@@ -982,6 +1073,788 @@ namespace NetworkScannerTool
 
             Controls.Add(footer);
         }
+        // =========================================================
+        // GITHUB OTOMATİK GÜNCELLEME
+        // =========================================================
+
+        private async Task CheckForUpdatesAsync(bool silent)
+        {
+            string previousStatus = statusLabel.Text;
+
+            try
+            {
+                if (!silent)
+                    statusLabel.Text = T(
+                        "Güncellemeler denetleniyor...",
+                        "Checking for updates...");
+
+                updateButton.Enabled = false;
+
+                string apiUrl =
+                    "https://api.github.com/repos/" +
+                    GitHubOwner + "/" +
+                    GitHubRepo +
+                    "/releases/latest";
+
+                using (var request = new HttpRequestMessage(HttpMethod.Get, apiUrl))
+                {
+                    request.Headers.UserAgent.ParseAdd(
+                        "NetworkScannerTool/" + CurrentVersion);
+
+                    request.Headers.Accept.ParseAdd(
+                        "application/vnd.github+json");
+
+                    using (HttpResponseMessage response =
+                        await updateHttp.SendAsync(request))
+                    {
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            if (!silent)
+                            {
+                                MessageBox.Show(
+                                    T(
+                                        "GitHub sürüm bilgisi alınamadı.\r\n\r\nHTTP: ",
+                                        "GitHub release information could not be retrieved.\r\n\r\nHTTP: ") +
+                                    (int)response.StatusCode,
+                                    T("Güncelleme", "Update"),
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Warning);
+                            }
+
+                            statusLabel.Text = previousStatus;
+                            return;
+                        }
+
+                        string json = await response.Content.ReadAsStringAsync();
+
+                        string tag = ExtractJsonString(json, "tag_name");
+                        string assetName = FindExeAssetName(json);
+                        string downloadUrl = FindExeDownloadUrl(json);
+
+                        if (string.IsNullOrWhiteSpace(tag))
+                            throw new InvalidOperationException(
+                                T(
+                                    "GitHub sürüm etiketi okunamadı.",
+                                    "GitHub release tag could not be read."));
+
+                        Version latestVersion;
+                        Version currentVersion;
+
+                        if (!TryParseVersion(tag, out latestVersion))
+                            throw new InvalidOperationException(
+                                T(
+                                    "GitHub sürüm numarası geçersiz: ",
+                                    "Invalid GitHub version number: ") + tag);
+
+                        if (!TryParseVersion(CurrentVersion, out currentVersion))
+                            currentVersion = new Version(0, 0);
+
+                        if (latestVersion <= currentVersion)
+                        {
+                            statusLabel.Text = T(
+                                "Program güncel.",
+                                "Application is up to date.");
+
+                            if (!silent)
+                            {
+                                MessageBox.Show(
+                                    T(
+                                        "En güncel sürümü kullanıyorsunuz.\r\n\r\nSürüm: v",
+                                        "You are using the latest version.\r\n\r\nVersion: v") +
+                                    CurrentVersion,
+                                    T("Güncelleme", "Update"),
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Information);
+                            }
+
+                            return;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(downloadUrl))
+                        {
+                            MessageBox.Show(
+                                T(
+                                    "Yeni sürüm bulundu ancak Release Assets bölümünde indirilebilir .exe dosyası bulunamadı.\r\n\r\nYeni sürüm: ",
+                                    "A new version was found, but no downloadable .exe file exists in Release Assets.\r\n\r\nNew version: ") +
+                                tag,
+                                T("Yeni Sürüm", "New Version"),
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+
+                            statusLabel.Text = previousStatus;
+                            return;
+                        }
+
+                        DialogResult result = MessageBox.Show(
+                            T(
+                                "Yeni sürüm bulundu.\r\n\r\nMevcut sürüm: v",
+                                "A new version is available.\r\n\r\nCurrent version: v") +
+                            CurrentVersion +
+                            T("\r\nYeni sürüm: ", "\r\nNew version: ") +
+                            tag +
+                            T(
+                                "\r\n\r\nŞimdi indirip güncellemek ister misiniz?",
+                                "\r\n\r\nWould you like to download and install it now?"),
+                            T("Yeni Sürüm", "New Version"),
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Information);
+
+                        if (result != DialogResult.Yes)
+                        {
+                            statusLabel.Text = previousStatus;
+                            return;
+                        }
+
+                        await DownloadAndInstallUpdateAsync(
+                            downloadUrl,
+                            string.IsNullOrWhiteSpace(assetName)
+                                ? "NetworkScannerTool.exe"
+                                : assetName,
+                            tag);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                statusLabel.Text = T(
+                    "Güncelleme kontrolü başarısız.",
+                    "Update check failed.");
+
+                if (!silent)
+                {
+                    MessageBox.Show(
+                        T(
+                            "Güncelleme kontrolü sırasında hata oluştu.\r\n\r\n",
+                            "An error occurred while checking for updates.\r\n\r\n") +
+                        ex.Message,
+                        T("Güncelleme Hatası", "Update Error"),
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+            }
+            finally
+            {
+                updateButton.Enabled = true;
+            }
+        }
+
+        private async Task DownloadAndInstallUpdateAsync(
+            string downloadUrl,
+            string assetName,
+            string releaseTag)
+        {
+            string tempExe = Path.Combine(
+                Path.GetTempPath(),
+                "NetworkScannerTool_Update_" +
+                Guid.NewGuid().ToString("N") +
+                ".exe");
+
+            string currentExe = Application.ExecutablePath;
+
+            try
+            {
+                statusLabel.Text = T(
+                    "Yeni sürüm indiriliyor...",
+                    "Downloading new version...");
+
+                using (var request = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    downloadUrl))
+                {
+                    request.Headers.UserAgent.ParseAdd(
+                        "NetworkScannerTool/" + CurrentVersion);
+
+                    using (HttpResponseMessage response =
+                        await updateHttp.SendAsync(request))
+                    {
+                        response.EnsureSuccessStatusCode();
+
+                        byte[] data =
+                            await response.Content.ReadAsByteArrayAsync();
+
+                        if (data == null ||
+                            data.Length < 2 ||
+                            data[0] != 0x4D ||
+                            data[1] != 0x5A)
+                        {
+                            throw new InvalidDataException(
+                                T(
+                                    "İndirilen dosya geçerli bir Windows EXE dosyası değil.",
+                                    "The downloaded file is not a valid Windows EXE file."));
+                        }
+
+                        File.WriteAllBytes(tempExe, data);
+                    }
+                }
+
+                string updaterBat = Path.Combine(
+                    Path.GetTempPath(),
+                    "NetworkScannerTool_Updater_" +
+                    Guid.NewGuid().ToString("N") +
+                    ".cmd");
+
+                string script =
+                    "@echo off\r\n" +
+                    "setlocal\r\n" +
+                    "timeout /t 2 /nobreak >nul\r\n" +
+                    ":waitloop\r\n" +
+                    "tasklist /FI \"PID eq " +
+                    Process.GetCurrentProcess().Id +
+                    "\" 2>nul | find \"" +
+                    Process.GetCurrentProcess().Id +
+                    "\" >nul\r\n" +
+                    "if not errorlevel 1 (\r\n" +
+                    "  timeout /t 1 /nobreak >nul\r\n" +
+                    "  goto waitloop\r\n" +
+                    ")\r\n" +
+                    "copy /y \"" +
+                    tempExe +
+                    "\" \"" +
+                    currentExe +
+                    "\" >nul\r\n" +
+                    "if errorlevel 1 (\r\n" +
+                    "  echo Update failed.\r\n" +
+                    "  pause\r\n" +
+                    "  exit /b 1\r\n" +
+                    ")\r\n" +
+                    "start \"\" \"" +
+                    currentExe +
+                    "\"\r\n" +
+                    "del /q \"" +
+                    tempExe +
+                    "\" >nul 2>&1\r\n" +
+                    "del /q \"%~f0\" >nul 2>&1\r\n";
+
+                File.WriteAllText(
+                    updaterBat,
+                    script,
+                    Encoding.Default);
+
+                statusLabel.Text = T(
+                    "Güncelleme hazır. Program yeniden başlatılıyor...",
+                    "Update is ready. Restarting application...");
+
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = "cmd.exe";
+                psi.Arguments = "/c \"" + updaterBat + "\"";
+                psi.UseShellExecute = true;
+                psi.WindowStyle = ProcessWindowStyle.Hidden;
+
+                // Program Files gibi korumalı klasörlerde eski EXE'nin
+                // üzerine yazabilmek için updater yönetici olarak çalışır.
+                if (!CanWriteToApplicationDirectory())
+                    psi.Verb = "runas";
+
+                Process.Start(psi);
+
+                Application.Exit();
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                statusLabel.Text = T(
+                    "Güncelleme iptal edildi.",
+                    "Update was cancelled.");
+
+                TryDeleteFile(tempExe);
+            }
+            catch (Exception ex)
+            {
+                TryDeleteFile(tempExe);
+
+                statusLabel.Text = T(
+                    "Güncelleme yüklenemedi.",
+                    "Update could not be installed.");
+
+                MessageBox.Show(
+                    T(
+                        "Yeni sürüm indirilirken veya kurulurken hata oluştu.\r\n\r\n",
+                        "An error occurred while downloading or installing the new version.\r\n\r\n") +
+                    ex.Message,
+                    T("Güncelleme Hatası", "Update Error"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        private bool CanWriteToApplicationDirectory()
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(
+                    Application.ExecutablePath);
+
+                if (string.IsNullOrWhiteSpace(dir))
+                    return false;
+
+                string testFile = Path.Combine(
+                    dir,
+                    ".nst_write_test_" +
+                    Guid.NewGuid().ToString("N") +
+                    ".tmp");
+
+                File.WriteAllText(testFile, "test");
+                File.Delete(testFile);
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(path) &&
+                    File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool TryParseVersion(
+            string value,
+            out Version version)
+        {
+            version = null;
+
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            value = value.Trim();
+
+            if (value.StartsWith(
+                "v",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                value = value.Substring(1);
+            }
+
+            int dash = value.IndexOf('-');
+            if (dash >= 0)
+                value = value.Substring(0, dash);
+
+            int plus = value.IndexOf('+');
+            if (plus >= 0)
+                value = value.Substring(0, plus);
+
+            return Version.TryParse(value, out version);
+        }
+
+        private static string ExtractJsonString(
+            string json,
+            string propertyName)
+        {
+            if (string.IsNullOrWhiteSpace(json) ||
+                string.IsNullOrWhiteSpace(propertyName))
+            {
+                return "";
+            }
+
+            string marker = "\"" + propertyName + "\"";
+            int keyIndex = json.IndexOf(
+                marker,
+                StringComparison.OrdinalIgnoreCase);
+
+            if (keyIndex < 0)
+                return "";
+
+            int colon = json.IndexOf(':', keyIndex + marker.Length);
+            if (colon < 0)
+                return "";
+
+            int firstQuote = json.IndexOf('"', colon + 1);
+            if (firstQuote < 0)
+                return "";
+
+            int i = firstQuote + 1;
+            StringBuilder sb = new StringBuilder();
+            bool escaped = false;
+
+            while (i < json.Length)
+            {
+                char c = json[i++];
+
+                if (escaped)
+                {
+                    switch (c)
+                    {
+                        case '"': sb.Append('"'); break;
+                        case '\\': sb.Append('\\'); break;
+                        case '/': sb.Append('/'); break;
+                        case 'b': sb.Append('\b'); break;
+                        case 'f': sb.Append('\f'); break;
+                        case 'n': sb.Append('\n'); break;
+                        case 'r': sb.Append('\r'); break;
+                        case 't': sb.Append('\t'); break;
+                        default: sb.Append(c); break;
+                    }
+
+                    escaped = false;
+                    continue;
+                }
+
+                if (c == '\\')
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (c == '"')
+                    break;
+
+                sb.Append(c);
+            }
+
+            return sb.ToString();
+        }
+
+        private static string FindExeAssetName(string json)
+        {
+            return FindExeAssetProperty(json, "name");
+        }
+
+        private static string FindExeDownloadUrl(string json)
+        {
+            return FindExeAssetProperty(
+                json,
+                "browser_download_url");
+        }
+
+        private static string FindExeAssetProperty(
+            string json,
+            string propertyName)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return "";
+
+            int assetsIndex = json.IndexOf(
+                "\"assets\"",
+                StringComparison.OrdinalIgnoreCase);
+
+            if (assetsIndex < 0)
+                return "";
+
+            int searchFrom = assetsIndex;
+
+            while (searchFrom < json.Length)
+            {
+                int urlMarker = json.IndexOf(
+                    "\"browser_download_url\"",
+                    searchFrom,
+                    StringComparison.OrdinalIgnoreCase);
+
+                if (urlMarker < 0)
+                    break;
+
+                string url = ExtractJsonString(
+                    json.Substring(urlMarker),
+                    "browser_download_url");
+
+                if (!string.IsNullOrWhiteSpace(url) &&
+                    url.EndsWith(
+                        ".exe",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    if (propertyName.Equals(
+                        "browser_download_url",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        return url;
+                    }
+
+                    // Aynı asset objesindeki name alanını geriye doğru bul.
+                    int objectStart = json.LastIndexOf(
+                        '{',
+                        urlMarker);
+
+                    if (objectStart >= 0)
+                    {
+                        int nameMarker = json.IndexOf(
+                            "\"name\"",
+                            objectStart,
+                            StringComparison.OrdinalIgnoreCase);
+
+                        if (nameMarker >= 0 &&
+                            nameMarker < urlMarker)
+                        {
+                            return ExtractJsonString(
+                                json.Substring(nameMarker),
+                                "name");
+                        }
+                    }
+
+                    return Path.GetFileName(
+                        new Uri(url).LocalPath);
+                }
+
+                searchFrom = urlMarker + 24;
+            }
+
+            return "";
+        }
+
+        // =========================================================
+        // LIGHT / DARK TEMA
+        // =========================================================
+
+        private void ApplyTheme()
+        {
+            Color formBack = darkMode
+                ? Color.FromArgb(24, 27, 32)
+                : Color.FromArgb(247, 248, 250);
+
+            Color panelBack = darkMode
+                ? Color.FromArgb(31, 35, 41)
+                : Color.White;
+
+            Color inputBack = darkMode
+                ? Color.FromArgb(38, 43, 50)
+                : Color.White;
+
+            Color textColor = darkMode
+                ? Color.FromArgb(230, 234, 239)
+                : Color.FromArgb(31, 41, 55);
+
+            Color mutedColor = darkMode
+                ? Color.FromArgb(165, 174, 185)
+                : Color.DimGray;
+
+            Color lineColor = darkMode
+                ? Color.FromArgb(72, 79, 88)
+                : Color.FromArgb(220, 224, 230);
+
+            Color buttonBack = darkMode
+                ? Color.FromArgb(47, 53, 61)
+                : SystemColors.Control;
+
+            Color buttonText = darkMode
+                ? Color.White
+                : SystemColors.ControlText;
+
+            BackColor = formBack;
+            ForeColor = textColor;
+
+            ApplyThemeRecursive(
+                this,
+                formBack,
+                panelBack,
+                inputBack,
+                textColor,
+                mutedColor,
+                lineColor,
+                buttonBack,
+                buttonText);
+
+            // Footer link renkleri
+            footer.ForeColor = mutedColor;
+            footer.LinkColor = darkMode
+                ? Color.FromArgb(110, 168, 255)
+                : Color.FromArgb(55, 105, 170);
+
+            footer.ActiveLinkColor = darkMode
+                ? Color.FromArgb(145, 190, 255)
+                : Color.FromArgb(35, 80, 140);
+
+            footer.VisitedLinkColor = footer.LinkColor;
+        }
+
+        private void ApplyThemeRecursive(
+            Control parent,
+            Color formBack,
+            Color panelBack,
+            Color inputBack,
+            Color textColor,
+            Color mutedColor,
+            Color lineColor,
+            Color buttonBack,
+            Color buttonText)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                if (c is TabPage)
+                {
+                    c.BackColor = panelBack;
+                    c.ForeColor = textColor;
+                }
+                else if (c is TabControl)
+                {
+                    c.BackColor = formBack;
+                    c.ForeColor = textColor;
+                }
+                else if (c is TextBox)
+                {
+                    TextBox tb = (TextBox)c;
+                    tb.BackColor = inputBack;
+                    tb.ForeColor = textColor;
+                    tb.BorderStyle = BorderStyle.FixedSingle;
+                }
+                else if (c is ComboBox)
+                {
+                    ComboBox cb = (ComboBox)c;
+                    cb.BackColor = inputBack;
+                    cb.ForeColor = textColor;
+                    cb.FlatStyle = FlatStyle.Flat;
+                }
+                else if (c is Button)
+                {
+                    Button b = (Button)c;
+                    b.BackColor = buttonBack;
+                    b.ForeColor = buttonText;
+                    b.FlatStyle = FlatStyle.System;
+                    b.UseVisualStyleBackColor = !darkMode;
+                }
+                else if (c is ListView)
+                {
+                    ListView lv = (ListView)c;
+                    lv.BackColor = inputBack;
+                    lv.ForeColor = textColor;
+                }
+                else if (c is Label)
+                {
+                    Label l = (Label)c;
+
+                    if (l.Height <= 2)
+                    {
+                        l.BackColor = lineColor;
+                    }
+                    else
+                    {
+                        l.BackColor = Color.Transparent;
+
+                        if (l.ForeColor == Color.DimGray ||
+                            l.ForeColor == Color.FromArgb(105, 110, 120))
+                        {
+                            l.ForeColor = mutedColor;
+                        }
+                        else
+                        {
+                            l.ForeColor = textColor;
+                        }
+                    }
+                }
+                else if (c is LinkLabel)
+                {
+                    LinkLabel ll = (LinkLabel)c;
+                    ll.BackColor = Color.Transparent;
+                    ll.ForeColor = mutedColor;
+                    ll.LinkColor = darkMode
+                        ? Color.FromArgb(110, 168, 255)
+                        : Color.FromArgb(55, 105, 170);
+                    ll.ActiveLinkColor = darkMode
+                        ? Color.FromArgb(145, 190, 255)
+                        : Color.FromArgb(35, 80, 140);
+                    ll.VisitedLinkColor = ll.LinkColor;
+                }
+                else if (c is CheckBox)
+                {
+                    CheckBox ch = (CheckBox)c;
+                    ch.BackColor = Color.Transparent;
+                    ch.ForeColor = textColor;
+                }
+                else if (c is ProgressBar)
+                {
+                    c.BackColor = inputBack;
+                }
+                else if (!(c is PictureBox))
+                {
+                    c.BackColor = c.Parent is TabPage
+                        ? panelBack
+                        : formBack;
+                    c.ForeColor = textColor;
+                }
+
+                if (c.HasChildren)
+                {
+                    ApplyThemeRecursive(
+                        c,
+                        formBack,
+                        panelBack,
+                        inputBack,
+                        textColor,
+                        mutedColor,
+                        lineColor,
+                        buttonBack,
+                        buttonText);
+                }
+            }
+
+            // ContextMenuStrip'ler Controls ağacında değildir.
+            ApplyContextMenuTheme();
+        }
+
+        private void ApplyContextMenuTheme()
+        {
+            if (devices.ContextMenuStrip == null)
+                return;
+
+            ContextMenuStrip menu = devices.ContextMenuStrip;
+
+            menu.BackColor = darkMode
+                ? Color.FromArgb(35, 39, 45)
+                : SystemColors.Control;
+
+            menu.ForeColor = darkMode
+                ? Color.White
+                : SystemColors.ControlText;
+
+            foreach (ToolStripItem item in menu.Items)
+            {
+                item.BackColor = menu.BackColor;
+                item.ForeColor = menu.ForeColor;
+            }
+        }
+
+        // =========================================================
+        // DPI YARDIMCILARI
+        // =========================================================
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
+            // Form ilk kez görünür olduğunda yerleşimi DPI'ya göre
+            // yeniden hesaplat ve tüm kontrolleri aynı font ailesine çek.
+            NormalizeLayoutForDpi(this);
+
+            ApplyTheme();
+        }
+
+        private void NormalizeLayoutForDpi(Control parent)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                if (c is Button)
+                {
+                    Button b = (Button)c;
+                    b.TextAlign = ContentAlignment.MiddleCenter;
+                    b.AutoEllipsis = true;
+                }
+                else if (c is Label)
+                {
+                    Label l = (Label)c;
+
+                    if (l.AutoSize)
+                        l.AutoSize = false;
+
+                    l.AutoEllipsis = true;
+                }
+                else if (c is ComboBox)
+                {
+                    ((ComboBox)c).IntegralHeight = false;
+                }
+
+                if (c.HasChildren)
+                    NormalizeLayoutForDpi(c);
+            }
+        }
+
         private void SafeCopyToClipboard(string text)
         {
             if (string.IsNullOrEmpty(text))
