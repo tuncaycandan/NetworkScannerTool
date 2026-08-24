@@ -121,4 +121,7 @@
   <data name="tuncay_gokturk" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\tuncay_gokturk.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="networkscanner_about" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\networkscanner_about.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
 </root>

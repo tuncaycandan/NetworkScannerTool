@@ -11,6 +11,7 @@ using System.Net.NetworkInformation;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -346,7 +347,6 @@ namespace NetworkScannerTool
         private readonly Label gatewayLabel = new Label();
         private readonly Label networkSummary = new Label();
         private readonly Button scanButton = new Button();
-        private readonly Button stopButton = new Button();
         private readonly Button exportButton = new Button();
         private readonly ListView devices = new ListView();
         private readonly ProgressBar progress = new ProgressBar();
@@ -366,7 +366,8 @@ namespace NetworkScannerTool
         private readonly Label languageLabel = new Label();
         private readonly ComboBox themeCombo = new ComboBox();
         private readonly Label themeLabel = new Label();
-        private readonly Button updateButton = new Button();
+        private readonly LinkLabel versionLink = new LinkLabel();
+        private readonly Button logButton = new Button();
         private bool englishMode = false;
         private bool darkMode = false;
         private bool startupUpdateCheckDone = false;
@@ -560,12 +561,15 @@ namespace NetworkScannerTool
             LocalizeExistingData();
 
             scanAllCheck.Text = T("Tüm ağları tara", "Scan all networks");
-            scanButton.Text = T("Ağı Tara", "Scan Network");
-            stopButton.Text = T("Durdur", "Stop");
-            exportButton.Text = T("CSV Dışa Aktar", "Export CSV");
+            scanAllCheck.Location = new Point(375, 13);
+            scanAllCheck.Size = new Size(125, 28);
+            scanAllCheck.CheckAlign = ContentAlignment.MiddleLeft;
+            scanAllCheck.TextAlign = ContentAlignment.MiddleLeft;
+            scanButton.Text = T("Tara", "Scan");
+            exportButton.Text = T("HTML Rapor", "HTML Report");
             scanPortsButton.Text = T("Portları Tara", "Scan Ports");
             scanSharesButton.Text = T("Paylaşımları Tara", "Scan Shares");
-            updateButton.Text = T("Güncellemeyi Denetle", "Check for Updates");
+            versionLink.Text = "v" + CurrentVersion;
 
             themeLabel.Text = T("Tema:", "Theme:");
             themeCombo.Items.Clear();
@@ -588,7 +592,7 @@ namespace NetworkScannerTool
             }
 
             adapterCombo.Location = englishMode ? new Point(80, 14) : new Point(55, 14);
-            adapterCombo.Size = englishMode ? new Size(285, 24) : new Size(310, 24);
+            adapterCombo.Size = new Size(285, 24);
 
             var rangeLabels = Controls.Find("rangeLabel", true);
             if (rangeLabels.Length > 0)
@@ -712,28 +716,26 @@ namespace NetworkScannerTool
             {
             }
             BuildUi();
+            AppLogger.Initialize();
 
-
-
-
-            // ==========================
-            // SAĞ ALT - GÖKTÜRK İMZASI
-            // ==========================
+            // Sağ alt bölüm: mevcut tuncay_gokturk.png imzası.
             var gokturkLogo = new PictureBox
             {
                 Image = Properties.Resources.tuncay_gokturk,
                 SizeMode = PictureBoxSizeMode.CenterImage,
                 Size = new Size(90, 20),
-                Location = new Point(870, 620),
+                Location = new Point(880, 620),
                 BackColor = Color.Transparent,
-                Anchor = AnchorStyles.Right | AnchorStyles.Bottom
+                Anchor = AnchorStyles.Right | AnchorStyles.Bottom,
+                Cursor = Cursors.Hand
             };
-
+            gokturkLogo.Click += (s, e) => ShowAboutDialog();
             Controls.Add(gokturkLogo);
             gokturkLogo.BringToFront();
 
             LoadAdapters();
             ApplyLanguage();
+            AppLogger.Info("Application", "UI initialized; version v" + CurrentVersion);
 
             // Program açıldıktan 3 saniye sonra sessizce güncelleme kontrolü yap.
             Shown += async (s, e) =>
@@ -761,41 +763,55 @@ namespace NetworkScannerTool
             Controls.Add(networkLabel);
 
             adapterCombo.Location = new Point(55, 14);
-            adapterCombo.Size = new Size(310, 24);
+            adapterCombo.Size = new Size(285, 24);
             adapterCombo.DropDownStyle = ComboBoxStyle.DropDownList;
             adapterCombo.SelectedIndexChanged += (s, e) => ApplySelectedAdapter();
             Controls.Add(adapterCombo);
 
-            networkSummary.Location = new Point(375, 18);
-            networkSummary.Size = new Size(135, 22);
+            networkSummary.Location = new Point(505, 18);
+            networkSummary.Size = new Size(110, 22);
             networkSummary.Font = new Font(Font, FontStyle.Bold);
             Controls.Add(networkSummary);
 
             scanAllCheck.Text = "Tüm ağları tara";
-            scanAllCheck.Location = new Point(520, 16);
-            scanAllCheck.Size = new Size(120, 22);
+            scanAllCheck.Location = new Point(350, 13);
+            scanAllCheck.Size = new Size(125, 28);
+            scanAllCheck.AutoSize = false;
+            scanAllCheck.CheckAlign = ContentAlignment.MiddleLeft;
+            scanAllCheck.TextAlign = ContentAlignment.MiddleLeft;
+            scanAllCheck.FlatStyle = FlatStyle.Standard;
+            scanAllCheck.UseVisualStyleBackColor = true;
             Controls.Add(scanAllCheck);
 
-            scanButton.Text = "Ağı Tara";
-            scanButton.Location = new Point(650, 10);
-            scanButton.Size = new Size(90, 32);
+            scanButton.Text = "Tara";
+            scanButton.Location = new Point(700, 10);
+            scanButton.Size = new Size(85, 32);
+            scanButton.BackColor = Color.FromArgb(0, 120, 215);
+            scanButton.ForeColor = Color.White;
+            scanButton.FlatStyle = FlatStyle.Flat;
+            scanButton.FlatAppearance.BorderSize = 0;
+            scanButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(30, 140, 235);
+            scanButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(0, 90, 175);
+            scanButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             scanButton.Font = new Font(Font, FontStyle.Bold);
-            scanButton.Click += async (s, e) => await StartScanAsync();
+            scanButton.Click += async (s, e) => await ScanButton_ClickAsync();
             Controls.Add(scanButton);
 
-            stopButton.Text = "Durdur";
-            stopButton.Location = new Point(750, 10);
-            stopButton.Size = new Size(85, 32);
-            stopButton.Enabled = false;
-            stopButton.Click += (s, e) => scanCts?.Cancel();
-            Controls.Add(stopButton);
 
-            exportButton.Text = "CSV Dışa Aktar";
-            exportButton.Location = new Point(845, 10);
-            exportButton.Size = new Size(115, 32);
+            exportButton.Text = "HTML Rapor";
+            exportButton.Location = new Point(795, 10);
+            exportButton.Size = new Size(100, 32);
+            exportButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             exportButton.Enabled = false;
-            exportButton.Click += (s, e) => ExportCsv();
+            exportButton.Click += (s, e) => ExportHtmlReport();
             Controls.Add(exportButton);
+
+            logButton.Text = "Log";
+            logButton.Location = new Point(905, 10);
+            logButton.Size = new Size(55, 32);
+            logButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            logButton.Click += (s, e) => OpenLogFolder();
+            Controls.Add(logButton);
 
             localIpLabel.Location = new Point(18, 50);
             localIpLabel.Size = new Size(210, 20);
@@ -812,6 +828,8 @@ namespace NetworkScannerTool
 
             rangeStart.Location = new Point(493, 46);
             rangeStart.Size = new Size(118, 24);
+            rangeStart.Leave += (s, e) => UpdateRangeEndFromStart();
+            rangeStart.KeyDown += RangeTextBox_KeyDown;
             Controls.Add(rangeStart);
 
             var dash = new Label { Text = "-", Location = new Point(616, 50), Size = new Size(12, 20), TextAlign = ContentAlignment.MiddleCenter };
@@ -819,6 +837,7 @@ namespace NetworkScannerTool
 
             rangeEnd.Location = new Point(632, 46);
             rangeEnd.Size = new Size(118, 24);
+            rangeEnd.KeyDown += RangeTextBox_KeyDown;
             Controls.Add(rangeEnd);
 
             var refreshBtn = new Button { Name = "refreshBtn", Text = "Ağ Bilgisini Yenile", Location = new Point(760, 46), Size = new Size(200, 26) };
@@ -1016,21 +1035,27 @@ namespace NetworkScannerTool
             footerLine.BackColor = Color.FromArgb(220, 224, 230);
             Controls.Add(footerLine);
 
-            // Güncelleme butonu - sol alt
-            updateButton.Text = T("Güncellemeyi Denetle", "Check for Updates");
-            updateButton.Location = new Point(18, 618);
-            updateButton.Size = new Size(155, 27);
-            updateButton.Font = new Font("Segoe UI", 8.5F, FontStyle.Regular);
-            updateButton.Click += async (s, e) => await CheckForUpdatesAsync(false);
-            Controls.Add(updateButton);
-            updateButton.BringToFront();
+            // Mevcut sürüm bağlantısı - sol alt
+            versionLink.Text = "v" + CurrentVersion;
+            versionLink.Location = new Point(18, 618);
+            versionLink.Size = new Size(70, 27);
+            versionLink.Font = new Font("Segoe UI", 8.5F, FontStyle.Underline);
+            versionLink.LinkColor = Color.RoyalBlue;
+            versionLink.ActiveLinkColor = Color.DarkBlue;
+            versionLink.VisitedLinkColor = Color.RoyalBlue;
+            versionLink.Cursor = Cursors.Hand;
+            versionLink.TextAlign = ContentAlignment.MiddleLeft;
+            versionLink.AutoSize = false;
+            versionLink.Click += async (s, e) => await CheckForUpdatesAsync(false);
+            Controls.Add(versionLink);
+            versionLink.BringToFront();
 
             // Footer
             footer.Location = new Point(18, 620);
             footer.Size = new Size(942, 24);
 
             footer.Text =
-                "tuncay   •   tuncay.net.tr";
+                "tuncay.net.tr";
 
             footer.TextAlign = ContentAlignment.MiddleCenter;
 
@@ -1072,6 +1097,7 @@ namespace NetworkScannerTool
             };
 
             Controls.Add(footer);
+            versionLink.BringToFront();
         }
         // =========================================================
         // GITHUB OTOMATİK GÜNCELLEME
@@ -1079,6 +1105,7 @@ namespace NetworkScannerTool
 
         private async Task CheckForUpdatesAsync(bool silent)
         {
+            AppLogger.Info("Update check", silent ? "started silently" : "started by user");
             string previousStatus = statusLabel.Text;
 
             try
@@ -1088,7 +1115,7 @@ namespace NetworkScannerTool
                         "Güncellemeler denetleniyor...",
                         "Checking for updates...");
 
-                updateButton.Enabled = false;
+                versionLink.Enabled = false;
 
                 string apiUrl =
                     "https://api.github.com/repos/" +
@@ -1216,6 +1243,7 @@ namespace NetworkScannerTool
             }
             catch (Exception ex)
             {
+                AppLogger.Error("Update check", "", ex);
                 statusLabel.Text = T(
                     "Güncelleme kontrolü başarısız.",
                     "Update check failed.");
@@ -1234,7 +1262,7 @@ namespace NetworkScannerTool
             }
             finally
             {
-                updateButton.Enabled = true;
+                versionLink.Enabled = true;
             }
         }
 
@@ -1284,6 +1312,11 @@ namespace NetworkScannerTool
                         }
 
                         File.WriteAllBytes(tempExe, data);
+                        if (!HasAuthenticodeSignature(tempExe))
+                        {
+                            TryDeleteFile(tempExe);
+                            throw new InvalidDataException(T("Güncelleme dosyasının dijital imzası doğrulanamadı.", "The update file's digital signature could not be verified."));
+                        }
                     }
                 }
 
@@ -1373,6 +1406,19 @@ namespace NetworkScannerTool
                     T("Güncelleme Hatası", "Update Error"),
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
+            }
+        }
+
+        private static bool HasAuthenticodeSignature(string path)
+        {
+            try
+            {
+                var certificate = X509Certificate.CreateFromSignedFile(path);
+                return certificate != null && !string.IsNullOrWhiteSpace(certificate.Subject);
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -1705,10 +1751,28 @@ namespace NetworkScannerTool
                 else if (c is Button)
                 {
                     Button b = (Button)c;
-                    b.BackColor = buttonBack;
-                    b.ForeColor = buttonText;
-                    b.FlatStyle = FlatStyle.System;
-                    b.UseVisualStyleBackColor = !darkMode;
+                    b.FlatStyle = FlatStyle.Flat;
+                    b.FlatAppearance.BorderSize = 0;
+                    b.UseVisualStyleBackColor = false;
+                    if (ReferenceEquals(b, scanButton))
+                    {
+                        bool scanning = scanCts != null;
+                        b.BackColor = scanning
+                            ? Color.FromArgb(210, 45, 45)
+                            : Color.FromArgb(0, 120, 215);
+                        b.ForeColor = Color.White;
+                        b.FlatAppearance.MouseOverBackColor = scanning
+                            ? Color.FromArgb(230, 65, 65)
+                            : Color.FromArgb(30, 140, 235);
+                        b.FlatAppearance.MouseDownBackColor = scanning
+                            ? Color.FromArgb(175, 30, 30)
+                            : Color.FromArgb(0, 90, 175);
+                    }
+                    else
+                    {
+                        b.BackColor = buttonBack;
+                        b.ForeColor = buttonText;
+                    }
                 }
                 else if (c is ListView)
                 {
@@ -2358,24 +2422,67 @@ namespace NetworkScannerTool
 
 
         private const int MaxConcurrentScans = 40;
+        private const int MaxScanTargets = 65536;
+        private const int MaxConcurrentDetailScans = 16;
+        private static readonly SemaphoreSlim DetailScanLimiter =
+            new SemaphoreSlim(MaxConcurrentDetailScans, MaxConcurrentDetailScans);
+
+        private async Task ScanButton_ClickAsync()
+        {
+            if (scanCts != null)
+            {
+                scanCts.Cancel();
+                return;
+            }
+
+            await StartScanAsync();
+        }
+
+        private void SetScanButtonState(bool scanning)
+        {
+            scanButton.Text = scanning ? T("Durdur", "Stop") : T("Tara", "Scan");
+            scanButton.BackColor = scanning
+                ? Color.FromArgb(210, 45, 45)
+                : Color.FromArgb(0, 120, 215);
+            scanButton.ForeColor = Color.White;
+            scanButton.FlatStyle = FlatStyle.Flat;
+            scanButton.FlatAppearance.BorderSize = 0;
+            scanButton.FlatAppearance.MouseOverBackColor = scanning
+                ? Color.FromArgb(230, 65, 65)
+                : Color.FromArgb(30, 140, 235);
+            scanButton.FlatAppearance.MouseDownBackColor = scanning
+                ? Color.FromArgb(175, 30, 30)
+                : Color.FromArgb(0, 90, 175);
+            scanButton.Enabled = true;
+        }
 
         private async Task StartScanAsync()
         {
             if (scanCts != null)
                 return;
 
+            AppLogger.Info("Network scan", "started");
             var targets = new List<Tuple<string, string>>();
+            ulong estimatedTargets = 0;
 
             if (scanAllCheck.Checked)
             {
                 foreach (var a in adapters)
                 {
                     var r = GetSuggestedRange(a.Ip, a.Mask);
+                    estimatedTargets += CountRange(r.Item1, r.Item2);
+                }
 
-                    targets.AddRange(
-                        BuildRange(r.Item1, r.Item2)
-                        .Select(ip => Tuple.Create(ip, a.Name))
-                    );
+                if (estimatedTargets > MaxScanTargets)
+                {
+                    MessageBox.Show(T("Tarama aralığı çok geniş. En fazla " + MaxScanTargets + " hedef taranabilir.", "The scan range is too large. At most " + MaxScanTargets + " targets can be scanned."), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                foreach (var a in adapters)
+                {
+                    var r = GetSuggestedRange(a.Ip, a.Mask);
+                    targets.AddRange(BuildRange(r.Item1, r.Item2).Select(ip => Tuple.Create(ip, a.Name)));
                 }
             }
             else
@@ -2387,7 +2494,9 @@ namespace NetworkScannerTool
                 IPAddress endIp;
 
                 if (!IPAddress.TryParse(rangeStart.Text, out startIp) ||
-                    !IPAddress.TryParse(rangeEnd.Text, out endIp))
+                    !IPAddress.TryParse(rangeEnd.Text, out endIp) ||
+                    startIp.AddressFamily != AddressFamily.InterNetwork ||
+                    endIp.AddressFamily != AddressFamily.InterNetwork)
                 {
                     MessageBox.Show(
                         T("Geçerli bir IPv4 aralığı girin.", "Enter a valid IPv4 range."),
@@ -2398,12 +2507,16 @@ namespace NetworkScannerTool
                     return;
                 }
 
+                estimatedTargets = CountRange(rangeStart.Text, rangeEnd.Text);
+                if (estimatedTargets > MaxScanTargets)
+                {
+                    MessageBox.Show(T("Tarama aralığı çok geniş. En fazla " + MaxScanTargets + " hedef taranabilir.", "The scan range is too large. At most " + MaxScanTargets + " targets can be scanned."), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 targets.AddRange(
                     BuildRange(rangeStart.Text, rangeEnd.Text)
-                    .Select(ip =>
-                        Tuple.Create(
-                            ip,
-                            adapters[adapterCombo.SelectedIndex].Name))
+                    .Select(ip => Tuple.Create(ip, adapters[adapterCombo.SelectedIndex].Name))
                 );
             }
 
@@ -2439,8 +2552,7 @@ namespace NetworkScannerTool
                 MaxConcurrentScans +
                 T(" eşzamanlı tarama", " concurrent scans");
 
-            scanButton.Enabled = false;
-            stopButton.Enabled = true;
+            SetScanButtonState(true);
             exportButton.Enabled = false;
 
             scanCts = new CancellationTokenSource();
@@ -2513,10 +2625,11 @@ namespace NetworkScannerTool
                                 Seen = DateTime.Now
                             };
 
-                            Interlocked.Increment(ref found);
-                        }
+                                    Interlocked.Increment(ref found);
+                                    AppLogger.Info("Device discovered", ip);
+                                }
 
-                        int current =
+                                int current =
                             Interlocked.Increment(ref done);
 
                         if (IsDisposed || Disposing)
@@ -2604,6 +2717,7 @@ namespace NetworkScannerTool
                 statusLabel.Text =
                     scanResults.Count +
                     T(" cihaz bulundu • Tarama tamamlandı.", " device(s) found • Scan completed.");
+                AppLogger.Info("Network scan", "completed; devices=" + scanResults.Count);
 
                 exportButton.Enabled =
                     scanResults.Count > 0;
@@ -2616,6 +2730,7 @@ namespace NetworkScannerTool
                     T("Tarama durduruldu • ", "Scan stopped • ") +
                     scanResults.Count +
                     T(" cihaz bulundu.", " device(s) found.");
+                AppLogger.Warning("Network scan", "cancelled; devices=" + scanResults.Count);
 
                 exportButton.Enabled =
                     scanResults.Count > 0;
@@ -2632,8 +2747,7 @@ namespace NetworkScannerTool
                     scanCts = null;
                 }
 
-                scanButton.Enabled = true;
-                stopButton.Enabled = false;
+                SetScanButtonState(false);
             }
         }
 
@@ -2803,10 +2917,23 @@ namespace NetworkScannerTool
             }
         }
 
-        private async Task<string> DetectDeviceTypeAsync(
-      string ip,
-      string hostname,
-      string vendor)
+        private async Task<string> DetectDeviceTypeAsync(string ip, string hostname, string vendor)
+        {
+            await DetailScanLimiter.WaitAsync();
+            try
+            {
+                return await DetectDeviceTypeCoreAsync(ip, hostname, vendor);
+            }
+            finally
+            {
+                DetailScanLimiter.Release();
+            }
+        }
+
+        private async Task<string> DetectDeviceTypeCoreAsync(
+            string ip,
+            string hostname,
+            string vendor)
         {
             string v =
                 (vendor ?? "")
@@ -3417,6 +3544,7 @@ namespace NetworkScannerTool
             }
 
             bottomTabs.SelectedIndex = 1;
+            AppLogger.Info("Port scan", "started; target=" + d.Ip);
 
             portsList.Items.Clear();
 
@@ -3534,9 +3662,11 @@ namespace NetworkScannerTool
                     " • " +
                     openCount +
                     T(" açık port bulundu.", " open port(s) found.");
+                AppLogger.Info("Port scan", "completed; target=" + d.Ip + "; open=" + openCount);
             }
             catch (Exception ex)
             {
+                AppLogger.Error("Port scan", d.Ip, ex);
                 portsList.Items.Clear();
 
                 portsList.Items.Add(
@@ -3634,7 +3764,11 @@ namespace NetworkScannerTool
                     var winner = await Task.WhenAny(task, Task.Delay(timeoutMs));
                     return winner == task && client.Connected;
                 }
-                catch { return false; }
+                catch (Exception ex)
+                {
+                    AppLogger.Error("TCP port test", ip + ":" + port, ex);
+                    return false;
+                }
             }
         }
 
@@ -5030,7 +5164,7 @@ namespace NetworkScannerTool
             {
                 if (buffer != IntPtr.Zero)
                 {
-                    try { NetApiBufferFreeHost(buffer); }
+                    try { NetApiBufferFree(buffer); }
                     catch { }
                 }
             }
@@ -5056,7 +5190,7 @@ namespace NetworkScannerTool
             out IntPtr bufptr);
 
         [DllImport("Netapi32.dll")]
-        private static extern int NetApiBufferFreeHost(
+        private static extern int NetApiBufferFree(
             IntPtr Buffer);
 
         private async Task<string> GetMacAsync(string ip)
@@ -5386,26 +5520,278 @@ namespace NetworkScannerTool
                 }));
         }
 
-        private void ExportCsv()
+        private void ExportHtmlReport()
         {
-            if (scanResults.Count == 0) return;
-            using (var sfd = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = "network_scan.csv" })
+            if (scanResults.Count == 0)
+                return;
+
+            try
             {
-                if (sfd.ShowDialog(this) != DialogResult.OK) return;
-                var sb = new StringBuilder();
-                sb.AppendLine(T("IP Adresi,Hostname,MAC Adresi,Üretici,Cihaz Türü,Yanıt,Durum,Ağ", "IP Address,Hostname,MAC Address,Vendor,Device Type,Response,Status,Network"));
-                foreach (var d in scanResults)
+                string directory = AppLogger.LogDirectory;
+                Directory.CreateDirectory(directory);
+                string filePath = Path.Combine(
+                    directory,
+                    "network_scan_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".html");
+
+                var reportDevices = scanResults.ToList();
+                var typeCounts = reportDevices
+                    .GroupBy(d => string.IsNullOrWhiteSpace(d.DeviceType) ? T("Diğer", "Other") : d.DeviceType)
+                    .OrderByDescending(g => g.Count())
+                    .ThenBy(g => g.Key)
+                    .Select(g => new { Name = g.Key, Count = g.Count() })
+                    .ToList();
+    
+                var html = new StringBuilder();
+                html.AppendLine("<!doctype html>");
+                html.AppendLine("<html lang=\"" + (englishMode ? "en" : "tr") + "\"><head>");
+                html.AppendLine("<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+                html.AppendLine("<title>Network Scanner Report</title>");
+                html.AppendLine("<style>:root{--blue:#1464c4;--cyan:#06b6d4;--ink:#172033;--muted:#64748b;--line:#e2e8f0}*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;background:linear-gradient(135deg,#eaf4ff 0%,#f8fbff 45%,#eef7f5 100%);color:var(--ink);margin:0;padding:36px}.card{max-width:1500px;margin:auto;background:rgba(255,255,255,.94);border:1px solid #fff;border-radius:22px;padding:32px;box-shadow:0 18px 50px #1e3a5f22}.hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(120deg,#0d4fa8,#1686cf 55%,#08a6a6);color:#fff;border-radius:16px;padding:26px 30px;margin-bottom:24px}.hero h1{margin:0 0 6px;font-size:30px}.hero .meta{color:#dbeafe;margin:0}.actions{display:flex;gap:10px;align-items:center}.print{border:0;border-radius:10px;background:#fff;color:#0d4fa8;padding:11px 16px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px #001b3d33}.print:hover{background:#e0f2fe}.summary{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 24px}.stat{min-width:150px;background:#f0f7ff;border:1px solid #cfe5ff;border-radius:14px;padding:13px 16px}.stat strong{display:block;color:var(--blue);font-size:22px}.stat span{color:var(--muted);font-size:12px}.charts{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:18px;margin:0 0 24px}.chart-card{border:1px solid var(--line);border-radius:16px;padding:18px;background:#fbfdff}.chart-card h2{font-size:16px;margin:0 0 15px}.chart-row{display:flex;align-items:center;gap:22px}.pie{width:150px;height:150px;border-radius:50%;background:conic-gradient(var(--gradient));box-shadow:inset 0 0 0 22px #fff,0 5px 15px #123f7a22;flex:0 0 auto}.legend{display:grid;gap:7px}.legend-item{font-size:12px;color:var(--muted)}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.filters{background:#f8fbff;border:1px solid #cfe5ff;border-radius:14px;padding:16px;margin:0 0 20px}.filters h2{font-size:16px;margin:0 0 12px}.filter-list{display:flex;gap:10px;flex-wrap:wrap}.filter-list label{background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 11px;font-size:13px;cursor:pointer}.filter-list input{accent-color:var(--blue);margin-right:6px}table{border-collapse:separate;border-spacing:0;width:100%;font-size:14px;overflow:hidden;border:1px solid var(--line);border-radius:14px}th{background:#123f7a;color:#fff;text-align:left;padding:13px 12px;font-weight:600}td{padding:12px;border-bottom:1px solid var(--line);background:#fff}tr:nth-child(even) td{background:#f8fbff}tr:hover td{background:#e7f5ff}tr:last-child td{border-bottom:0}.footer{text-align:center;color:var(--muted);font-size:13px;margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}@media(max-width:800px){body{padding:14px}.card{padding:16px}.hero{display:block;padding:22px}.actions{margin-top:18px}.charts{grid-template-columns:1fr}.chart-row{align-items:flex-start;flex-direction:column}table{font-size:12px}th,td{padding:8px}}@media print{@page{size:A4 portrait;margin:5mm}body{background:#fff;padding:0}.card{box-shadow:none;border:0;padding:0;max-width:none}.actions,.filters{display:none}.hero{color:#000;background:#fff;border-bottom:3px solid #1464c4;border-radius:0;padding:0 0 15px}.hero .meta{color:#64748b} .summary{margin-bottom:8px}.stat{padding:4px 7px;min-width:90px}.stat strong{font-size:14px}.stat span{font-size:9px}.charts{display:none}table{table-layout:fixed;width:100%;font-size:7.2px;border-radius:0}thead{display:table-header-group}tr{page-break-inside:avoid}th,td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 2px;line-height:1.05}th{background:#123f7a!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}th:nth-child(1),td:nth-child(1){width:12%}th:nth-child(2),td:nth-child(2){width:12%}th:nth-child(3),td:nth-child(3){width:14%}th:nth-child(4),td:nth-child(4){width:14%}th:nth-child(5),td:nth-child(5){width:12%}th:nth-child(6),td:nth-child(6){width:8%}th:nth-child(7),td:nth-child(7){width:8%}th:nth-child(8),td:nth-child(8){width:20%}.pie{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>");
+                html.AppendLine("</head><body><div class=\"card\">");
+                html.AppendLine("<header class=\"hero\"><div><h1>" + Html(T("Ağ Tarama Raporu", "Network Scan Report")) + "</h1><p class=\"meta\">" + Html(DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss")) + "</p></div><div class=\"actions\"><button class=\"print\" onclick=\"window.print()\">" + Html(T("Yazdır", "Print")) + "</button></div></header>");
+                html.AppendLine("<section class=\"summary\"><div class=\"stat\"><strong>" + reportDevices.Count + "</strong><span>" + Html(T("Toplam cihaz", "Total devices")) + "</span></div><div class=\"stat\"><strong>" + reportDevices.Count(d => d.Status == T("Aktif", "Active")) + "</strong><span>" + Html(T("Aktif cihaz", "Active devices")) + "</span></div><div class=\"stat\"><strong>" + DateTime.Now.ToString("HH:mm") + "</strong><span>" + Html(T("Rapor saati", "Report time")) + "</span></div></section>");
+                html.AppendLine("<section class=\"filters\"><h2>" + Html(T("Yazdırılacak cihaz türleri", "Device types to print")) + "</h2><div class=\"filter-list\">");
+                foreach (var type in typeCounts)
+                    html.AppendLine("<label><input type=\"checkbox\" class=\"type-filter\" value=\"" + Html(type.Name) + "\" checked onchange=\"applyFilters()\">" + Html(type.Name) + "</label>");
+                html.AppendLine("</div></section>");
+                html.AppendLine("<table><thead><tr>");
+                string[] headers = {
+                    T("IP Adresi", "IP Address"), T("Hostname", "Hostname"),
+                    T("MAC Adresi", "MAC Address"), T("Üretici", "Vendor"),
+                    T("Cihaz Türü", "Device Type"), T("Yanıt", "Response"),
+                    T("Durum", "Status"), T("Ağ", "Network")
+                };
+                foreach (string header in headers)
+                    html.Append("<th>").Append(Html(header)).Append("</th>");
+                html.AppendLine("</tr></thead><tbody>");
+
+                foreach (var d in reportDevices)
                 {
-                    sb.AppendLine(string.Join(",", new[] {
-                        Csv(d.Ip), Csv(d.Hostname), Csv(d.Mac), Csv(d.Vendor),
-                        Csv(d.DeviceType), Csv(d.Response), Csv(d.Status), Csv(d.Network)
-                    }));
+                    html.AppendLine("<tr data-type=\"" + Html(d.DeviceType) + "\"><td>" + Html(d.Ip) + "</td><td>" + Html(d.Hostname) + "</td><td>" + Html(d.Mac) + "</td><td>" + Html(d.Vendor) + "</td><td>" + Html(d.DeviceType) + "</td><td>" + Html(d.Response) + "</td><td>" + Html(d.Status) + "</td><td>" + Html(d.Network) + "</td></tr>");
                 }
-                File.WriteAllText(sfd.FileName, sb.ToString(), new UTF8Encoding(true));
+
+                html.AppendLine("</tbody></table>");
+                html.AppendLine("<script>function applyFilters(){const selected=Array.from(document.querySelectorAll('.type-filter:checked')).map(x=>x.value);document.querySelectorAll('tbody tr[data-type]').forEach(row=>{row.style.display=selected.indexOf(row.dataset.type)>=0?'':'none';});}applyFilters();</script>");
+                html.AppendLine("<footer class=\"footer\">NetworkScanner v" + Html(CurrentVersion) + "</footer>");
+                html.AppendLine("</div></body></html>");
+                File.WriteAllText(filePath, html.ToString(), new UTF8Encoding(false));
+                AppLogger.Info("HTML report", filePath);
+                Process.Start(new ProcessStartInfo { FileName = filePath, UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("HTML report", "", ex);
+                MessageBox.Show(
+                    T("HTML raporu oluşturulamadı.\\r\\n\\r\\n", "HTML report could not be created.\\r\\n\\r\\n") + ex.Message,
+                    Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
-        private static string Csv(string s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
+        private static string BuildConicGradient(List<int> counts, string[] colors)
+        {
+            if (counts == null || counts.Count == 0)
+                return "#cbd5e1 0 100%";
+
+            int total = counts.Sum();
+            if (total == 0)
+                return "#cbd5e1 0 100%";
+
+            var parts = new List<string>();
+            double start = 0;
+            for (int i = 0; i < counts.Count; i++)
+            {
+                double end = start + (counts[i] * 100.0 / total);
+                string color = colors[i % colors.Length];
+                parts.Add(color + " " + start.ToString("0.##", CultureInfo.InvariantCulture) + "% " + end.ToString("0.##", CultureInfo.InvariantCulture) + "%");
+                start = end;
+            }
+            return string.Join(",", parts);
+        }
+
+        private string BuildChartCard<T>(string title, string gradient, List<T> groups, string[] colors)
+        {
+            var html = new StringBuilder();
+            html.Append("<div class=\"chart-card\"><h2>").Append(Html(title)).Append("</h2><div class=\"chart-row\"><div class=\"pie\" style=\"--gradient:").Append(gradient).Append("\"></div><div class=\"legend\">");
+            int index = 0;
+            foreach (var group in groups)
+            {
+                var name = (string)group.GetType().GetProperty("Name").GetValue(group, null);
+                var count = (int)group.GetType().GetProperty("Count").GetValue(group, null);
+                html.Append("<div class=\"legend-item\"><span class=\"dot\" style=\"background:").Append(colors[index % colors.Length]).Append("\"></span>").Append(Html(name)).Append(" <strong>").Append(count).Append("</strong></div>");
+                index++;
+            }
+            html.Append("</div></div></div>");
+            return html.ToString();
+        }
+
+        private static string Html(string value)
+        {
+            return System.Net.WebUtility.HtmlEncode(value ?? "");
+        }
+
+                private void ShowAboutDialog()
+        {
+            using (var about = new Form())
+            {
+                about.Text = T("Hakkında", "About");
+                about.StartPosition = FormStartPosition.CenterParent;
+                about.FormBorderStyle = FormBorderStyle.FixedDialog;
+                about.ClientSize = new Size(460, 330);
+                about.MinimizeBox = false;
+                about.MaximizeBox = false;
+                about.ShowInTaskbar = false;
+                about.BackColor = Color.White;
+                about.Padding = new Padding(0);
+
+                var header = new Panel
+                {
+                    Location = new Point(0, 0),
+                    Size = new Size(460, 112),
+                    BackColor = Color.FromArgb(13, 79, 168)
+                };
+                about.Controls.Add(header);
+
+                var logo = new PictureBox
+                {
+                    Image = Properties.Resources.networkscanner_about,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    Location = new Point(24, 16),
+                    Size = new Size(80, 80),
+                    BackColor = Color.Transparent
+                };
+                header.Controls.Add(logo);
+
+                var title = new Label
+                {
+                    Text = "NetworkScanner",
+                    Location = new Point(125, 25),
+                    Size = new Size(305, 32),
+                    Font = new Font("Segoe UI", 17, FontStyle.Bold),
+                    ForeColor = Color.White
+                };
+                header.Controls.Add(title);
+
+                var version = new Label
+                {
+                    Text = "v" + CurrentVersion + "  •  " + T("Ağ keşif ve analiz aracı", "Network discovery and analysis tool"),
+                    Location = new Point(127, 63),
+                    Size = new Size(305, 25),
+                    Font = new Font("Segoe UI", 9.5F),
+                    ForeColor = Color.FromArgb(215, 235, 255)
+                };
+                header.Controls.Add(version);
+
+                var information = new Label
+                {
+                    Text = T("Uygulama bilgileri", "Application information"),
+                    Location = new Point(28, 132),
+                    AutoSize = true,
+                    Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(20, 80, 145)
+                };
+                about.Controls.Add(information);
+
+                var separator = new Panel
+                {
+                    Location = new Point(28, 158),
+                    Size = new Size(404, 1),
+                    BackColor = Color.FromArgb(220, 228, 238)
+                };
+                about.Controls.Add(separator);
+
+                var developer = new Label
+                {
+                    Text = T("Programcı", "Developer") + ":  Tuncay Candan",
+                    Location = new Point(28, 174),
+                    AutoSize = true,
+                    Font = new Font("Segoe UI", 10),
+                    ForeColor = Color.FromArgb(40, 48, 60)
+                };
+                about.Controls.Add(developer);
+
+                var github = new LinkLabel
+                {
+                    Text = "GitHub:  github.com/tuncaycandan/NetworkScannerTool",
+                    Location = new Point(28, 207),
+                    AutoSize = true,
+                    Font = new Font("Segoe UI", 10),
+                    LinkColor = Color.FromArgb(20, 90, 180),
+                    ActiveLinkColor = Color.FromArgb(10, 55, 130),
+                    VisitedLinkColor = Color.FromArgb(20, 90, 180),
+                    Cursor = Cursors.Hand
+                };
+                github.Links.Clear();
+                github.Links.Add(
+                    "GitHub:  ".Length,
+                    "github.com/tuncaycandan/NetworkScannerTool".Length,
+                    "https://github.com/tuncaycandan/NetworkScannerTool");
+                github.LinkClicked += (s, e) => OpenUrl(e.Link.LinkData.ToString());
+                about.Controls.Add(github);
+
+                var web = new LinkLabel
+                {
+                    Text = "Web:  www.tuncay.net.tr",
+                    Location = new Point(28, 240),
+                    AutoSize = true,
+                    Font = new Font("Segoe UI", 10),
+                    LinkColor = Color.FromArgb(20, 90, 180),
+                    ActiveLinkColor = Color.FromArgb(10, 55, 130),
+                    VisitedLinkColor = Color.FromArgb(20, 90, 180),
+                    Cursor = Cursors.Hand
+                };
+                web.Links.Clear();
+                web.Links.Add(
+                    "Web:  ".Length,
+                    "www.tuncay.net.tr".Length,
+                    "https://www.tuncay.net.tr");
+                web.LinkClicked += (s, e) => OpenUrl(e.Link.LinkData.ToString());
+                about.Controls.Add(web);
+
+                var ok = new Button
+                {
+                    Text = T("Tamam", "OK"),
+                    Location = new Point(352, 282),
+                    Size = new Size(80, 30),
+                    DialogResult = DialogResult.OK,
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(20, 100, 190),
+                    ForeColor = Color.White,
+                    Cursor = Cursors.Hand
+                };
+                ok.FlatAppearance.BorderColor = Color.FromArgb(15, 75, 145);
+                ok.FlatAppearance.MouseOverBackColor = Color.FromArgb(35, 125, 215);
+                ok.FlatAppearance.MouseDownBackColor = Color.FromArgb(12, 70, 145);
+                about.AcceptButton = ok;
+                about.CancelButton = ok;
+                about.Controls.Add(ok);
+                about.ShowDialog(this);
+            }
+        }
+
+
+        private void OpenLogFolder()
+        {
+            try
+            {
+                string directory = AppLogger.LogDirectory;
+                Directory.CreateDirectory(directory);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = "\"" + directory + "\"",
+                    UseShellExecute = false
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Open log folder", "", ex);
+                MessageBox.Show(
+                    T("Log klasörü açılamadı.\r\n\r\n", "Could not open the log folder.\r\n\r\n") + ex.Message,
+                    Text,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+        }
 
         private static void RunCmd(string args)
         {
@@ -5416,6 +5802,28 @@ namespace NetworkScannerTool
         private static void OpenUrl(string url)
         {
             try { Process.Start(url); } catch { }
+        }
+
+        private async void RangeTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Enter)
+                return;
+
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            await StartScanAsync();
+        }
+
+        private void UpdateRangeEndFromStart()
+        {
+            IPAddress start;
+            if (!IPAddress.TryParse(rangeStart.Text.Trim(), out start) ||
+                start.AddressFamily != AddressFamily.InterNetwork)
+                return;
+
+            byte[] bytes = start.GetAddressBytes();
+            bytes[3] = 254;
+            rangeEnd.Text = new IPAddress(bytes).ToString();
         }
 
         private static Tuple<string, string> GetSuggestedRange(string ip, string mask)
@@ -5435,6 +5843,13 @@ namespace NetworkScannerTool
             uint b = ToUInt(bb);
             if (b <= n + 1) return Tuple.Create(ip, ip);
             return Tuple.Create(FromUInt(n + 1), FromUInt(b - 1));
+        }
+
+        private static ulong CountRange(string start, string end)
+        {
+            uint s = ToUInt(IPAddress.Parse(start).GetAddressBytes());
+            uint e = ToUInt(IPAddress.Parse(end).GetAddressBytes());
+            return e < s ? 0UL : (ulong)e - s + 1UL;
         }
 
         private static IEnumerable<string> BuildRange(string start, string end)
@@ -5589,29 +6004,7 @@ namespace NetworkScannerTool
             }
         }
 
-        private sealed class AdapterInfo
-        {
-            public string Name, Ip, Mask, Gateway, Mac;
-        }
-
-        private sealed class DeviceInfo
-        {
-            public string Ip, Hostname, Mac, Vendor, DeviceType, Response, Status, Network;
-            public DateTime Seen;
-        }
-
-        private sealed class PortResult
-        {
-            public int Port;
-            public string Service;
-            public bool Open;
-        }
-
-        private sealed class HistoryEntry
-        {
-            public DateTime Time;
-            public string Status, Hostname, Mac;
-        }
+        
 
         private void InitializeComponent()
         {
@@ -5628,75 +6021,5 @@ namespace NetworkScannerTool
         }
     }
 
-    internal static class NetShareEnumerator
-    {
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct SHARE_INFO_1
-        {
-            public string shi1_netname;
-            public uint shi1_type;
-            public string shi1_remark;
-        }
-
-        [DllImport("Netapi32.dll", CharSet = CharSet.Unicode)]
-        private static extern int NetShareEnum(
-            string servername,
-            int level,
-            out IntPtr bufptr,
-            int prefmaxlen,
-            out int entriesread,
-            out int totalentries,
-            ref int resume_handle);
-
-        [DllImport("Netapi32.dll")]
-        private static extern int NetApiBufferFree(IntPtr Buffer);
-
-        public static List<ShareInfo> GetShares(string ip)
-        {
-            var result = new List<ShareInfo>();
-            IntPtr buf;
-            int read, total, resume = 0;
-            int code = NetShareEnum(@"\" + ip, 1, out buf, -1, out read, out total, ref resume);
-
-            if (code == 5) throw new UnauthorizedAccessException();
-            if (code != 0 && code != 234) throw new InvalidOperationException("NetShareEnum hata kodu: " + code);
-
-            try
-            {
-                int size = Marshal.SizeOf(typeof(SHARE_INFO_1));
-                var cur = buf;
-                for (int i = 0; i < read; i++)
-                {
-                    var s = (SHARE_INFO_1)Marshal.PtrToStructure(cur, typeof(SHARE_INFO_1));
-                    result.Add(new ShareInfo
-                    {
-                        Name = s.shi1_netname,
-                        Type = ShareTypeName(s.shi1_type)
-                    });
-                    cur = IntPtr.Add(cur, size);
-                }
-            }
-            finally
-            {
-                if (buf != IntPtr.Zero) NetApiBufferFree(buf);
-            }
-            return result;
-        }
-
-        private static string ShareTypeName(uint t)
-        {
-            uint baseType = t & 0xFF;
-            if (baseType == 0) return "Disk";
-            if (baseType == 1) return "Print";
-            if (baseType == 3) return "IPC";
-            return "Diğer";
-        }
-    }
-
-    internal sealed class ShareInfo
-    {
-        public string Name;
-        public string Type;
-    }
 }
 

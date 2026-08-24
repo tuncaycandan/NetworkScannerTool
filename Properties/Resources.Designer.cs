@@ -63,11 +63,22 @@ namespace NetworkScannerTool.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
-        internal static System.Drawing.Bitmap tuncay_gokturk {
+                internal static System.Drawing.Bitmap tuncay_gokturk {
             get {
                 object obj = ResourceManager.GetObject("tuncay_gokturk", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
+
+        /// <summary>
+        ///   About penceresinde kullanılan NetworkScanner logosunu arar.
+        /// </summary>
+        internal static System.Drawing.Bitmap networkscanner_about {
+            get {
+                object obj = ResourceManager.GetObject("networkscanner_about", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+
     }
 }

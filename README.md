@@ -12,7 +12,7 @@ device type, open ports and network shares.
 
 ## ⬇️ Download
 
-### Latest Release
+### Latest Release — v1.2
 
 👉 [Download Network Scanner Tool](https://github.com/tuncaycandan/NetworkScannerTool/releases/latest)
 

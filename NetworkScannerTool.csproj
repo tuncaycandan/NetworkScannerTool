@@ -62,6 +62,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="AppLogger.cs" />
+    <Compile Include="Models\ScanModels.cs" />
+    <Compile Include="Infrastructure\NetShareEnumerator.cs" />
     <Compile Include="MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
