@@ -1291,10 +1291,9 @@ namespace NetworkScannerTool
                     throw new InvalidDataException(T(
                         "İndirilen dosya geçerli bir Windows EXE dosyası değil.",
                         "The downloaded file is not a valid Windows EXE file."));
-                if (!HasAuthenticodeSignature(tempExe))
-                    throw new InvalidDataException(T(
-                        "Güncelleme dosyasının dijital imzası doğrulanamadı.",
-                        "The update file's digital signature could not be verified."));
+                // Release asseti SHA-256 digest ile doğrulandı.
+                // Bu proje için yayınlanan EXE Authenticode ile imzalanmıyor;
+                // hash doğrulaması güncelleme güvenlik kontrolüdür.
 
                 statusLabel.Text = T(
                     "Güncelleme hazır. Program yeniden başlatılıyor...",

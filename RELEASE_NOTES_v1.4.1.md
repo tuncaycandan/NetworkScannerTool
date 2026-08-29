@@ -9,12 +9,13 @@
 - Hardened Turkish text rendering and removed mojibake from scan status messages.
 - Preserved the standalone single-executable distribution model.
 - Retained secure process execution and verified update installation flow.
+- Fixed update installation for unsigned release executables by relying on the trusted GitHub SHA-256 asset digest after download verification.
 
 ## Verification
 
 - Release build completed successfully.
 - The executable launched successfully on Windows during the startup test.
-- SHA-256: `B775B9EE3DBAA10D321F3F1E92CB1C7D411B931B03AED2921C1CA68294C8539B`
+- SHA-256: `BADEE85C3612A01BF71D303CBD4E6659B660C28316F65B1B9E5E84380848C1C9`
 
 ## Installation
 
