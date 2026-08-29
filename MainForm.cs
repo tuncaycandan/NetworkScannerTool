@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -203,21 +203,15 @@ namespace NetworkScannerTool
             {
                 statusLabel.Text = T("OpenSSH Client yükleniyor...", "Installing OpenSSH Client...");
 
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    Arguments =
-                        "-NoProfile -ExecutionPolicy Bypass -Command " +
-                        "\"$ErrorActionPreference='Stop'; " +
-                        "Add-WindowsCapability -Online " +
-                        "-Name OpenSSH.Client~~~~0.0.1.0\"",
-
-                    UseShellExecute = true,
-                    Verb = "runas",
-                    WindowStyle = ProcessWindowStyle.Normal
-                };
-
-                Process process = Process.Start(psi);
+                Process process = processRunner.StartElevated(
+                    "powershell.exe",
+                    new[]
+                    {
+                        "-NoProfile",
+                        "-ExecutionPolicy", "Bypass",
+                        "-Command",
+                        "$ErrorActionPreference='Stop'; Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0"
+                    });
 
                 if (process == null)
                 {
@@ -235,30 +229,18 @@ namespace NetworkScannerTool
                 int exitCode = process.ExitCode;
 
                 // Kurulum durumunu Windows Capability üzerinden doğrula
-                var checkPsi = new ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    Arguments =
-                        "-NoProfile -Command " +
-                        "\"(Get-WindowsCapability -Online " +
-                        "-Name OpenSSH.Client~~~~0.0.1.0).State\"",
-
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-
                 string state = "";
-
-                using (var checkProcess = Process.Start(checkPsi))
-                {
-                    if (checkProcess != null)
+                ProcessResult checkResult = await processRunner.RunAsync(
+                    "powershell.exe",
+                    new[]
                     {
-                        state = await checkProcess.StandardOutput.ReadToEndAsync();
-                        await Task.Run(() => checkProcess.WaitForExit());
-                    }
-                }
+                        "-NoProfile",
+                        "-Command",
+                        "(Get-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0).State"
+                    },
+                    TimeSpan.FromMinutes(2),
+                    CancellationToken.None);
+                state = checkResult.StandardOutput;
 
                 state = (state ?? "").Trim();
 
@@ -368,6 +350,7 @@ namespace NetworkScannerTool
         private readonly Label themeLabel = new Label();
         private readonly LinkLabel versionLink = new LinkLabel();
         private readonly Button logButton = new Button();
+        private readonly NetworkScanService networkScanService;
         private bool englishMode = false;
         private bool darkMode = false;
         private bool startupUpdateCheckDone = false;
@@ -390,6 +373,8 @@ namespace NetworkScannerTool
         private const string GitHubOwner = "tuncaycandan";
         private const string GitHubRepo = "NetworkScannerTool";
 
+        private readonly ProcessRunner processRunner = new ProcessRunner();
+        private readonly SecureUpdateService secureUpdateService = new SecureUpdateService();
         private readonly HttpClient updateHttp = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(12)
@@ -434,9 +419,9 @@ namespace NetworkScannerTool
                 case "Unknown":
                     return T("Bilinmiyor", "Unknown");
 
-                case "Aranıyor...":
+                case "Aran\u0131yor...":
                 case "Searching...":
-                    return T("Aranıyor...", "Searching...");
+                    return T("Aran\u0131yor...", "Searching...");
 
                 case "Tespit ediliyor...":
                 case "Detecting...":
@@ -716,12 +701,17 @@ namespace NetworkScannerTool
             {
             }
             BuildUi();
+            networkScanService = new NetworkScanService(
+                (ip, macs) => GetMacFastParallel(ip, macs),
+                () => T(string.Concat("Aran", (char)0x0131, "yor..."), "Searching..."),
+                () => T("Tespit ediliyor...", "Detecting..."),
+                () => T("Aktif", "Active"));
             AppLogger.Initialize();
 
             // Sağ alt bölüm: mevcut tuncay_gokturk.png imzası.
             var gokturkLogo = new PictureBox
             {
-                Image = Properties.Resources.tuncay_gokturk,
+                Image = LoadImageFile("tuncay_gokturk.png"),
                 SizeMode = PictureBoxSizeMode.CenterImage,
                 Size = new Size(90, 20),
                 Location = new Point(880, 620),
@@ -1099,7 +1089,6 @@ namespace NetworkScannerTool
             Controls.Add(footer);
             versionLink.BringToFront();
         }
-        // =========================================================
         // GITHUB OTOMATİK GÜNCELLEME
         // =========================================================
 
@@ -1157,6 +1146,7 @@ namespace NetworkScannerTool
                         string tag = ExtractJsonString(json, "tag_name");
                         string assetName = FindExeAssetName(json);
                         string downloadUrl = FindExeDownloadUrl(json);
+                        string expectedSha256 = FindExeAssetSha256(json);
 
                         if (string.IsNullOrWhiteSpace(tag))
                             throw new InvalidOperationException(
@@ -1232,8 +1222,13 @@ namespace NetworkScannerTool
                             return;
                         }
 
+                        if (string.IsNullOrWhiteSpace(expectedSha256))
+                            throw new InvalidDataException(T(
+                                "Güncelleme için güvenilir SHA-256 özeti bulunamadı; işlem durduruldu.",
+                                "A trusted SHA-256 digest was not found for the update; the operation was stopped."));
                         await DownloadAndInstallUpdateAsync(
                             downloadUrl,
+                            expectedSha256,
                             string.IsNullOrWhiteSpace(assetName)
                                 ? "NetworkScannerTool.exe"
                                 : assetName,
@@ -1268,6 +1263,7 @@ namespace NetworkScannerTool
 
         private async Task DownloadAndInstallUpdateAsync(
             string downloadUrl,
+            string expectedSha256,
             string assetName,
             string releaseTag)
         {
@@ -1285,100 +1281,36 @@ namespace NetworkScannerTool
                     "Yeni sürüm indiriliyor...",
                     "Downloading new version...");
 
-                using (var request = new HttpRequestMessage(
-                    HttpMethod.Get,
-                    downloadUrl))
-                {
-                    request.Headers.UserAgent.ParseAdd(
-                        "NetworkScannerTool/" + CurrentVersion);
-
-                    using (HttpResponseMessage response =
-                        await updateHttp.SendAsync(request))
-                    {
-                        response.EnsureSuccessStatusCode();
-
-                        byte[] data =
-                            await response.Content.ReadAsByteArrayAsync();
-
-                        if (data == null ||
-                            data.Length < 2 ||
-                            data[0] != 0x4D ||
-                            data[1] != 0x5A)
-                        {
-                            throw new InvalidDataException(
-                                T(
-                                    "İndirilen dosya geçerli bir Windows EXE dosyası değil.",
-                                    "The downloaded file is not a valid Windows EXE file."));
-                        }
-
-                        File.WriteAllBytes(tempExe, data);
-                        if (!HasAuthenticodeSignature(tempExe))
-                        {
-                            TryDeleteFile(tempExe);
-                            throw new InvalidDataException(T("Güncelleme dosyasının dijital imzası doğrulanamadı.", "The update file's digital signature could not be verified."));
-                        }
-                    }
-                }
-
-                string updaterBat = Path.Combine(
-                    Path.GetTempPath(),
-                    "NetworkScannerTool_Updater_" +
-                    Guid.NewGuid().ToString("N") +
-                    ".cmd");
-
-                string script =
-                    "@echo off\r\n" +
-                    "setlocal\r\n" +
-                    "timeout /t 2 /nobreak >nul\r\n" +
-                    ":waitloop\r\n" +
-                    "tasklist /FI \"PID eq " +
-                    Process.GetCurrentProcess().Id +
-                    "\" 2>nul | find \"" +
-                    Process.GetCurrentProcess().Id +
-                    "\" >nul\r\n" +
-                    "if not errorlevel 1 (\r\n" +
-                    "  timeout /t 1 /nobreak >nul\r\n" +
-                    "  goto waitloop\r\n" +
-                    ")\r\n" +
-                    "copy /y \"" +
-                    tempExe +
-                    "\" \"" +
-                    currentExe +
-                    "\" >nul\r\n" +
-                    "if errorlevel 1 (\r\n" +
-                    "  echo Update failed.\r\n" +
-                    "  pause\r\n" +
-                    "  exit /b 1\r\n" +
-                    ")\r\n" +
-                    "start \"\" \"" +
-                    currentExe +
-                    "\"\r\n" +
-                    "del /q \"" +
-                    tempExe +
-                    "\" >nul 2>&1\r\n" +
-                    "del /q \"%~f0\" >nul 2>&1\r\n";
-
-                File.WriteAllText(
-                    updaterBat,
-                    script,
-                    Encoding.Default);
+                await secureUpdateService.DownloadVerifiedPackageAsync(
+                    new Uri(downloadUrl),
+                    expectedSha256,
+                    tempExe,
+                    CancellationToken.None);
+                byte[] header = File.ReadAllBytes(tempExe);
+                if (header.Length < 2 || header[0] != 0x4D || header[1] != 0x5A)
+                    throw new InvalidDataException(T(
+                        "İndirilen dosya geçerli bir Windows EXE dosyası değil.",
+                        "The downloaded file is not a valid Windows EXE file."));
+                if (!HasAuthenticodeSignature(tempExe))
+                    throw new InvalidDataException(T(
+                        "Güncelleme dosyasının dijital imzası doğrulanamadı.",
+                        "The update file's digital signature could not be verified."));
 
                 statusLabel.Text = T(
                     "Güncelleme hazır. Program yeniden başlatılıyor...",
                     "Update is ready. Restarting application...");
-
-                ProcessStartInfo psi = new ProcessStartInfo();
-                psi.FileName = "cmd.exe";
-                psi.Arguments = "/c \"" + updaterBat + "\"";
-                psi.UseShellExecute = true;
-                psi.WindowStyle = ProcessWindowStyle.Hidden;
-
-                // Program Files gibi korumalı klasörlerde eski EXE'nin
-                // üzerine yazabilmek için updater yönetici olarak çalışır.
+                var updateArguments = new[]
+                {
+                    "--apply-update",
+                    tempExe,
+                    currentExe,
+                    Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+                    expectedSha256.Trim().ToLowerInvariant()
+                };
                 if (!CanWriteToApplicationDirectory())
-                    psi.Verb = "runas";
-
-                Process.Start(psi);
+                    processRunner.StartElevated(currentExe, updateArguments);
+                else
+                    processRunner.StartInteractive(currentExe, updateArguments);
 
                 Application.Exit();
             }
@@ -1573,6 +1505,33 @@ namespace NetworkScannerTool
                 "browser_download_url");
         }
 
+        private static string FindExeAssetSha256(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return "";
+            int assetsIndex = json.IndexOf("\"assets\"", StringComparison.OrdinalIgnoreCase);
+            int urlMarker = json.IndexOf("\"browser_download_url\"", assetsIndex, StringComparison.OrdinalIgnoreCase);
+            while (urlMarker >= 0)
+            {
+                string url = ExtractJsonString(json.Substring(urlMarker), "browser_download_url");
+                if (!string.IsNullOrWhiteSpace(url) && url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    int objectStart = json.LastIndexOf('{', urlMarker);
+                    int objectEnd = json.IndexOf('}', urlMarker);
+                    if (objectStart >= 0 && objectEnd > objectStart)
+                    {
+                        string asset = json.Substring(objectStart, objectEnd - objectStart + 1);
+                        string digest = ExtractJsonString(asset, "digest");
+                        if (digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+                            return digest.Substring("sha256:".Length);
+                    }
+                    return "";
+                }
+                urlMarker = json.IndexOf("\"browser_download_url\"", urlMarker + 1, StringComparison.OrdinalIgnoreCase);
+            }
+            return "";
+        }
+
         private static string FindExeAssetProperty(
             string json,
             string propertyName)
@@ -1747,6 +1706,8 @@ namespace NetworkScannerTool
                     cb.BackColor = inputBack;
                     cb.ForeColor = textColor;
                     cb.FlatStyle = FlatStyle.Flat;
+                    cb.Cursor = Cursors.Hand;
+                    cb.Font = new Font("Segoe UI", 9F);
                 }
                 else if (c is Button)
                 {
@@ -1754,6 +1715,9 @@ namespace NetworkScannerTool
                     b.FlatStyle = FlatStyle.Flat;
                     b.FlatAppearance.BorderSize = 0;
                     b.UseVisualStyleBackColor = false;
+                    b.Padding = new Padding(8, 2, 8, 2);
+                    b.Cursor = Cursors.Hand;
+                    b.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
                     if (ReferenceEquals(b, scanButton))
                     {
                         bool scanning = scanCts != null;
@@ -1779,6 +1743,11 @@ namespace NetworkScannerTool
                     ListView lv = (ListView)c;
                     lv.BackColor = inputBack;
                     lv.ForeColor = textColor;
+                    lv.BorderStyle = BorderStyle.None;
+                    lv.FullRowSelect = true;
+                    lv.GridLines = true;
+                    lv.HideSelection = false;
+                    lv.Font = new Font("Segoe UI", 9F);
                 }
                 else if (c is Label)
                 {
@@ -2083,10 +2052,18 @@ namespace NetworkScannerTool
                 if (!string.IsNullOrEmpty(selectedIp)) Process.Start("explorer.exe", @"\\" + selectedIp);
             });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Tracert", null, (s, e) => RunCmd("tracert " + selectedIp));
+            menu.Items.Add("Tracert", null, (s, e) =>
+            {
+                try { processRunner.StartInteractive("tracert.exe", new[] { selectedIp }); }
+                catch (Exception ex) { AppLogger.Error("Start tracert", selectedIp, ex); }
+            });
             menu.Items.Add("HTTP", null, (s, e) => OpenUrl("http://" + selectedIp));
             menu.Items.Add("HTTPS", null, (s, e) => OpenUrl("https://" + selectedIp));
-            menu.Items.Add("RDP", null, (s, e) => Process.Start("mstsc.exe", "/v:" + selectedIp));
+            menu.Items.Add("RDP", null, (s, e) =>
+            {
+                try { processRunner.StartInteractive("mstsc.exe", new[] { "/v:" + selectedIp }); }
+                catch (Exception ex) { AppLogger.Error("Start RDP", selectedIp, ex); }
+            });
             menu.Items.Add("SSH", null, async (s, e) =>
             {
                 if (string.IsNullOrWhiteSpace(selectedIp))
@@ -2113,10 +2090,9 @@ namespace NetworkScannerTool
 
                 try
                 {
-                    Process.Start(
-                        "cmd.exe",
-                        "/k \"\"" + sshPath + "\" " +
-                        username + "@" + selectedIp + "\"");
+                    processRunner.StartInteractive(
+                        sshPath,
+                        new[] { username + "@" + selectedIp });
                 }
                 catch (Exception ex)
                 {
@@ -2336,7 +2312,7 @@ namespace NetworkScannerTool
                 item.SubItems[0].Text = d.Ip;
                 item.SubItems[1].Text = d.Hostname;
                 item.SubItems[2].Text = d.Mac;
-                item.SubItems[3].Text = d.Vendor;
+                item.SubItems[3].Text = NormalizeDisplayText(d.Vendor);
                 item.SubItems[4].Text = d.DeviceType;
                 item.SubItems[5].Text = d.Response;
                 item.SubItems[6].Text = d.Status;
@@ -2421,8 +2397,32 @@ namespace NetworkScannerTool
 
 
 
-        private const int MaxConcurrentScans = 40;
+        private const int MinConcurrentScans = 16;
+        private const int DefaultConcurrentScans = 40;
+        private const int MaxConcurrentScans = 96;
         private const int MaxScanTargets = 65536;
+
+        private static int CalculateConcurrentScans(int targetCount)
+        {
+            if (targetCount <= 0)
+                return MinConcurrentScans;
+
+            int cpuCount = Math.Max(1, Environment.ProcessorCount);
+            int cpuBasedLimit = Math.Max(MinConcurrentScans, cpuCount * 8);
+            int targetBasedLimit = targetCount <= 128
+                ? 24
+                : targetCount <= 1024
+                    ? DefaultConcurrentScans
+                    : 64;
+
+            return Math.Max(
+                1,
+                Math.Min(
+                    targetCount,
+                    Math.Min(
+                        MaxConcurrentScans,
+                        Math.Min(cpuBasedLimit, targetBasedLimit))));
+        }
         private const int MaxConcurrentDetailScans = 16;
         private static readonly SemaphoreSlim DetailScanLimiter =
             new SemaphoreSlim(MaxConcurrentDetailScans, MaxConcurrentDetailScans);
@@ -2492,11 +2492,18 @@ namespace NetworkScannerTool
 
                 IPAddress startIp;
                 IPAddress endIp;
+                uint cidrNetwork;
+                uint cidrBroadcast;
+                bool isCidr = IpRangeService.TryParseCidr(
+                    rangeStart.Text,
+                    out cidrNetwork,
+                    out cidrBroadcast);
 
-                if (!IPAddress.TryParse(rangeStart.Text, out startIp) ||
-                    !IPAddress.TryParse(rangeEnd.Text, out endIp) ||
-                    startIp.AddressFamily != AddressFamily.InterNetwork ||
-                    endIp.AddressFamily != AddressFamily.InterNetwork)
+                if (!isCidr &&
+                    (!IPAddress.TryParse(rangeStart.Text, out startIp) ||
+                     !IPAddress.TryParse(rangeEnd.Text, out endIp) ||
+                     startIp.AddressFamily != AddressFamily.InterNetwork ||
+                     endIp.AddressFamily != AddressFamily.InterNetwork))
                 {
                     MessageBox.Show(
                         T("Geçerli bir IPv4 aralığı girin.", "Enter a valid IPv4 range."),
@@ -2507,16 +2514,20 @@ namespace NetworkScannerTool
                     return;
                 }
 
-                estimatedTargets = CountRange(rangeStart.Text, rangeEnd.Text);
+                estimatedTargets = isCidr
+                    ? IpRangeService.Count(rangeStart.Text)
+                    : CountRange(rangeStart.Text, rangeEnd.Text);
                 if (estimatedTargets > MaxScanTargets)
                 {
                     MessageBox.Show(T("Tarama aralığı çok geniş. En fazla " + MaxScanTargets + " hedef taranabilir.", "The scan range is too large. At most " + MaxScanTargets + " targets can be scanned."), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
+                IEnumerable<string> inputRange = isCidr
+                    ? IpRangeService.Enumerate(rangeStart.Text)
+                    : BuildRange(rangeStart.Text, rangeEnd.Text);
                 targets.AddRange(
-                    BuildRange(rangeStart.Text, rangeEnd.Text)
-                    .Select(ip => Tuple.Create(ip, adapters[adapterCombo.SelectedIndex].Name))
+                    inputRange.Select(ip => Tuple.Create(ip, adapters[adapterCombo.SelectedIndex].Name))
                 );
             }
 
@@ -2547,9 +2558,10 @@ namespace NetworkScannerTool
             progress.Maximum = Math.Max(1, targets.Count);
             progressLabel.Text = "0 / " + targets.Count;
 
+            int dynamicWorkerCount = CalculateConcurrentScans(targets.Count);
             statusLabel.Text =
                 T("Tarama başladı • ", "Scan started • ") +
-                MaxConcurrentScans +
+                dynamicWorkerCount +
                 T(" eşzamanlı tarama", " concurrent scans");
 
             SetScanButtonState(true);
@@ -2561,156 +2573,69 @@ namespace NetworkScannerTool
             int done = 0;
             int found = 0;
 
-            var limiter =
-                new SemaphoreSlim(
-                    MaxConcurrentScans,
-                    MaxConcurrentScans);
-
             try
             {
-                var scanTasks = targets.Select(async target =>
-                {
-                    bool entered = false;
-
-                    try
+                // Her hedef iÃ§in ayrÄ± Task Ã¼retmek yerine sabit worker havuzu kullanÄ±lÄ±r.
+                // BÃ¶ylece geniÅŸ aralÄ±klarda Task/closure ve semaphore bekleme maliyeti azalÄ±r.
+                int nextTarget = -1;
+                int workerCount = dynamicWorkerCount;
+                var scanTasks = Enumerable.Range(0, workerCount)
+                    .Select(_ => Task.Run(async () =>
                     {
-                        await limiter
-                            .WaitAsync(ct)
-                            .ConfigureAwait(false);
-
-                        entered = true;
-
-                        ct.ThrowIfCancellationRequested();
-
-                        string ip = target.Item1;
-                        PingReply reply = null;
-
-                        try
+                        while (true)
                         {
-                            using (var ping = new Ping())
+                            int index = Interlocked.Increment(ref nextTarget);
+                            if (index >= targets.Count)
+                                break;
+
+                            ct.ThrowIfCancellationRequested();
+                            DeviceInfo device = await networkScanService.ScanTargetAsync(
+                                targets[index].Item1,
+                                targets[index].Item2,
+                                localMacByIp,
+                                ct).ConfigureAwait(false);
+                            int current = Interlocked.Increment(ref done);
+
+                            if (device != null)
                             {
-                                reply = await ping
-                                    .SendPingAsync(ip, 220)
-                                    .ConfigureAwait(false);
+                                Interlocked.Increment(ref found);
+                                AppLogger.Info("Device discovered", device.Ip);
                             }
-                        }
-                        catch
-                        {
-                            reply = null;
-                        }
 
-                        ct.ThrowIfCancellationRequested();
-
-                        DeviceInfo device = null;
-
-                        if (reply != null &&
-                            reply.Status == IPStatus.Success)
-                        {
-                            string mac =
-                                GetMacFastParallel(
-                                    ip,
-                                    localMacByIp);
-
-                            device = new DeviceInfo
+                            // UI'ye her IP iÃ§in deÄŸil, bulunan cihazlarda ve 8'li
+                            // ilerleme aralÄ±klarÄ±nda bildirim gÃ¶nder.
+                            if (device != null || current == targets.Count || current % 8 == 0)
                             {
-                                Ip = ip,
-                                Hostname = ip,
-                                Mac = mac,
-                                Vendor = T("Aranıyor...", "Searching..."),
-                                DeviceType = T("Tespit ediliyor...", "Detecting..."),
-                                Response =
-                                    reply.RoundtripTime + " ms",
-                                Status = T("Aktif", "Active"),
-                                Network = target.Item2,
-                                Seen = DateTime.Now
-                            };
-
-                                    Interlocked.Increment(ref found);
-                                    AppLogger.Info("Device discovered", ip);
-                                }
-
-                                int current =
-                            Interlocked.Increment(ref done);
-
-                        if (IsDisposed || Disposing)
-                            return;
-
-                        try
-                        {
-                            Invoke((Action)(() =>
-                            {
-                                if (device != null)
+                                if (IsDisposed || Disposing)
+                                    continue;
+                                try
                                 {
-                                    scanResults.Add(device);
+                                    Invoke((Action)(() =>
+                                    {
+                                        if (device != null)
+                                        {
+                                            scanResults.Add(device);
+                                            AddHistory(device);
+                                            AddDeviceRow(device);
+                                            CompleteDeviceDetailsAsync(device).ContinueWith(t =>
+                                            {
+                                                if (t.IsFaulted)
+                                                    AppLogger.Error("Device details", device.Ip, t.Exception);
+                                            }, TaskScheduler.Default);
+                                        }
 
-                                    AddHistory(device);
-                                    AddDeviceRow(device);
-
-                                    // Hostname, üretici ve cihaz türü
-                                    // taramayı bekletmeden devam etsin.
-                                    _ = CompleteDeviceDetailsAsync(device);
+                                        progress.Value = Math.Min(progress.Maximum, current);
+                                        progressLabel.Text = current + " / " + targets.Count;
+                                        statusLabel.Text = T(string.Concat("Taran", (char)0x0131, "yor ", (char)0x2022, " "), "Scanning • ") + found + T(" cihaz bulundu", " device(s) found");
+                                    }));
                                 }
-
-                                progress.Value =
-                                    Math.Min(
-                                        progress.Maximum,
-                                        current);
-
-                                progressLabel.Text =
-                                    current +
-                                    " / " +
-                                    targets.Count;
-
-                                statusLabel.Text =
-                                    T("Taranıyor • ", "Scanning • ") +
-                                    found +
-                                    T(" cihaz bulundu", " device(s) found");
-                            }));
-                        }
-                        catch
-                        {
-                            // Form kapanıyorsa UI güncellemesini atla.
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // Ana metodun cancellation yönetmesine izin ver.
-                        throw;
-                    }
-                    catch
-                    {
-                        // Tek bir IP'deki hata tüm taramayı durdurmasın.
-                        int current =
-                            Interlocked.Increment(ref done);
-
-                        if (!IsDisposed && !Disposing)
-                        {
-                            try
-                            {
-                                Invoke((Action)(() =>
+                                catch
                                 {
-                                    progress.Value =
-                                        Math.Min(
-                                            progress.Maximum,
-                                            current);
-
-                                    progressLabel.Text =
-                                        current +
-                                        " / " +
-                                        targets.Count;
-                                }));
-                            }
-                            catch
-                            {
+                                    // Form kapanÄ±yorsa UI gÃ¼ncellemesini atla.
+                                }
                             }
                         }
-                    }
-                    finally
-                    {
-                        if (entered)
-                            limiter.Release();
-                    }
-                }).ToArray();
+                    })).ToArray();
 
                 await Task.WhenAll(scanTasks);
 
@@ -2739,8 +2664,6 @@ namespace NetworkScannerTool
             }
             finally
             {
-                limiter.Dispose();
-
                 if (scanCts != null)
                 {
                     scanCts.Dispose();
@@ -2895,7 +2818,7 @@ namespace NetworkScannerTool
                                 item.SubItems[1].Text = d.Hostname;
 
                             if (item.SubItems.Count > 3)
-                                item.SubItems[3].Text = d.Vendor;
+                                item.SubItems[3].Text = NormalizeDisplayText(d.Vendor);
 
                             if (item.SubItems.Count > 4)
                                 item.SubItems[4].Text = d.DeviceType;
@@ -3347,13 +3270,23 @@ namespace NetworkScannerTool
             AddDeviceRowCore(d);
         }
 
+        private string NormalizeDisplayText(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return value;
+            if (value.IndexOf("Aran\u00C4\u00B1yor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("Aran\u00C3\u00B1yor", StringComparison.OrdinalIgnoreCase) >= 0)
+                return string.Concat("Aran", (char)0x0131, "yor...");
+            return value;
+        }
+
         private void AddDeviceRowCore(DeviceInfo d)
         {
             var item = new ListViewItem(d.Ip);
 
             item.SubItems.Add(d.Hostname);
             item.SubItems.Add(d.Mac);
-            item.SubItems.Add(d.Vendor);
+            item.SubItems.Add(NormalizeDisplayText(d.Vendor));
             item.SubItems.Add(d.DeviceType);
             item.SubItems.Add(d.Response);
             item.SubItems.Add(d.Status);
@@ -5628,6 +5561,17 @@ namespace NetworkScannerTool
         {
             return System.Net.WebUtility.HtmlEncode(value ?? "");
         }
+        private static System.Drawing.Image LoadImageFile(string fileName)
+        {
+            string resourceName = "NetworkScannerTool.Embedded." + fileName;
+            using (var source = typeof(MainForm).Assembly.GetManifestResourceStream(resourceName))
+            {
+                if (source == null)
+                    return null;
+                using (var image = System.Drawing.Image.FromStream(source))
+                    return new System.Drawing.Bitmap(image);
+            }
+        }
 
                 private void ShowAboutDialog()
         {
@@ -5653,7 +5597,7 @@ namespace NetworkScannerTool
 
                 var logo = new PictureBox
                 {
-                    Image = Properties.Resources.networkscanner_about,
+                    Image = LoadImageFile("networkscanner_about.png"),
                     SizeMode = PictureBoxSizeMode.Zoom,
                     Location = new Point(24, 16),
                     Size = new Size(80, 80),
@@ -5793,16 +5737,20 @@ namespace NetworkScannerTool
             }
         }
 
-        private static void RunCmd(string args)
+                private void RunCmd(string args)
         {
             if (string.IsNullOrWhiteSpace(args)) return;
-            Process.Start(new ProcessStartInfo("cmd.exe", "/k " + args) { UseShellExecute = true });
+            string[] parts = args.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return;
+            try { processRunner.StartInteractive(parts[0], parts.Skip(1)); }
+            catch (Exception ex) { AppLogger.Error("Start command", args, ex); }
+        }
+        private void OpenUrl(string url)
+        {
+            try { processRunner.OpenHttpUrl(url); }
+            catch (Exception ex) { AppLogger.Error("Open URL", url, ex); }
         }
 
-        private static void OpenUrl(string url)
-        {
-            try { Process.Start(url); } catch { }
-        }
 
         private async void RangeTextBox_KeyDown(object sender, KeyEventArgs e)
         {
@@ -6022,4 +5970,5 @@ namespace NetworkScannerTool
     }
 
 }
+
 
