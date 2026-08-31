@@ -98,8 +98,8 @@ The upper controls are aligned for consistent spacing and text placement. The lo
 
 Screenshots are included in the repository:
 
-- English interface: `eng_ss.png`
-- Turkish interface: `tr_ss.png`
+- English interface: `ssen.jpg`
+- Turkish interface: `sstr.jpg`
 
 ![Network Scanner Tool - English](ssen.jpg)
 
