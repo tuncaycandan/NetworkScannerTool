@@ -2,11 +2,11 @@
 
 Fast, lightweight, and practical network discovery and diagnostics tool for Windows. Network Scanner Tool scans IPv4 ranges, discovers responsive devices, and presents IP address, hostname, MAC address, vendor, device type, response time, network, open ports, shares, and scan history in a single desktop application.
 
-The application provides both **Türkçe** and **English** interfaces and is distributed as a standalone single executable. The current application version is **v1.5.1**.
+The application provides both **Türkçe** and **English** interfaces and is distributed as a standalone single executable. The current application version is **v1.5.2**.
 
 ## Download
 
-Download the latest release from the [Network Scanner Tool v1.5.1 release page][release]. The package contains `NetworkScannerTool.exe`; no installer is required.
+Download the latest release from the [Network Scanner Tool v1.5.2 release page][release]. The package contains `NetworkScannerTool.exe`; no installer is required.
 
 > The executable is intended for supported Windows systems with .NET Framework 4.8 available.
 
@@ -74,10 +74,9 @@ Some actions depend on the target device, local Windows configuration, installed
 ### Reports and history
 
 - HTML report export.
-- CSV export.
 - Device scan history.
 - Open-port and network-share details for the selected device.
-- Scan summary with unique and total device counts.
+- Scan summary with unique and total device counts, elapsed time, and completion status.
 
 ### Update and security
 
@@ -115,7 +114,7 @@ Screenshots are included in the repository:
 6. Use the search, filter, column, density, and list/card controls to refine the results.
 7. Select a device to inspect its details, ports, shares, and history.
 8. Use the `+` indicator to expand records for the same MAC address found on other networks.
-9. Export the results as HTML or CSV when required.
+9. Export the results as an HTML report when required.
 
 For a large network, begin with the required adapter or CIDR range and use cancellation if the scan needs to be stopped. Scanning the same physical device through multiple adapters can produce multiple network records; these are intentionally grouped by normalized MAC address rather than discarded.
 
@@ -149,7 +148,7 @@ bin\Release\NetworkScannerTool.exe
 
 If no devices are discovered, verify that the selected adapter and IPv4 range are correct, that the target network is reachable, and that firewalls allow ICMP or the relevant diagnostic traffic. If a device is found without a MAC address, Windows may not have a usable ARP entry for that target or the network may not expose layer-2 information.
 
-If the update does not start, download the latest executable directly from the [v1.5.1 release page][release]. Do not delete a `.backup` file while an update is in progress; it is a recovery file and is removed automatically after successful startup.
+If the update does not start, download the latest executable directly from the [v1.5.2 release page][release]. Do not delete a `.backup` file while an update is in progress; it is a recovery file and is removed automatically after successful startup.
 
 ## Source code and contributions
 
@@ -163,6 +162,6 @@ Copyright © 2026 Tuncay Candan.
 
 ## References
 
-[release]: https://github.com/tuncaycandan/NetworkScannerTool/releases/tag/v1.5.1 "Network Scanner Tool v1.5.1"
+[release]: https://github.com/tuncaycandan/NetworkScannerTool/releases/tag/v1.5.2 "Network Scanner Tool v1.5.2"
 [issues]: https://github.com/tuncaycandan/NetworkScannerTool/issues "Network Scanner Tool Issues"
-[license]: https://github.com/tuncaycandan/NetworkScannerTool/blob/v1.5.1/LICENSE "Network Scanner Tool License"
+[license]: https://github.com/tuncaycandan/NetworkScannerTool/blob/v1.5.2/LICENSE "Network Scanner Tool License"
