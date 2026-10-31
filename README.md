@@ -100,7 +100,7 @@ Screenshots are included in the repository:
 - English interface: `eng_ss.png`
 - Turkish interface: `tr_ss.png`
 
-![Network Scanner Tool - English](eng_ss.png)
+![Network Scanner Tool - English](en_ss.png)
 
 ![Network Scanner Tool - Turkish](tr_ss.png)
 
