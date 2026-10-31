@@ -2,11 +2,11 @@
 
 Fast, lightweight, and practical network discovery and diagnostics tool for Windows. Network Scanner Tool scans IPv4 ranges, discovers responsive devices, and presents IP address, hostname, MAC address, vendor, device type, response time, network, open ports, shares, and scan history in a single desktop application.
 
-The application provides both **Türkçe** and **English** interfaces and is distributed as a standalone single executable. The current public release is **v1.5.0**.
+The application provides both **Türkçe** and **English** interfaces and is distributed as a standalone single executable. The current application version is **v1.5.1**.
 
 ## Download
 
-Download the latest release from the [Network Scanner Tool v1.5.0 release page][release]. The package contains `NetworkScannerTool.exe`; no installer is required.
+Download the latest release from the [Network Scanner Tool v1.5.1 release page][release]. The package contains `NetworkScannerTool.exe`; no installer is required.
 
 > The executable is intended for supported Windows systems with .NET Framework 4.8 available.
 
@@ -149,7 +149,7 @@ bin\Release\NetworkScannerTool.exe
 
 If no devices are discovered, verify that the selected adapter and IPv4 range are correct, that the target network is reachable, and that firewalls allow ICMP or the relevant diagnostic traffic. If a device is found without a MAC address, Windows may not have a usable ARP entry for that target or the network may not expose layer-2 information.
 
-If the update does not start, download the latest executable directly from the [v1.5.0 release page][release]. Do not delete a `.backup` file while an update is in progress; it is a recovery file and is removed automatically after successful startup.
+If the update does not start, download the latest executable directly from the [v1.5.1 release page][release]. Do not delete a `.backup` file while an update is in progress; it is a recovery file and is removed automatically after successful startup.
 
 ## Source code and contributions
 
@@ -163,6 +163,6 @@ Copyright © 2026 Tuncay Candan.
 
 ## References
 
-[release]: https://github.com/tuncaycandan/NetworkScannerTool/releases/tag/v1.5.0 "Network Scanner Tool v1.5.0"
+[release]: https://github.com/tuncaycandan/NetworkScannerTool/releases/tag/v1.5.1 "Network Scanner Tool v1.5.1"
 [issues]: https://github.com/tuncaycandan/NetworkScannerTool/issues "Network Scanner Tool Issues"
-[license]: https://github.com/tuncaycandan/NetworkScannerTool/blob/v1.5.0/LICENSE "Network Scanner Tool License"
+[license]: https://github.com/tuncaycandan/NetworkScannerTool/blob/v1.5.1/LICENSE "Network Scanner Tool License"
