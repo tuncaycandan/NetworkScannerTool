@@ -53,17 +53,19 @@ namespace NetworkScannerTool
 
                 Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
                 Task<string> errorTask = process.StandardError.ReadToEndAsync();
-                Task exitTask = WaitForExitAsync(process, cancellationToken);
-                Task timeoutTask = Task.Delay(timeout, cancellationToken);
-                Task completed = await Task.WhenAny(exitTask, timeoutTask).ConfigureAwait(false);
+                Task exitTask = WaitForExitAsync(process, CancellationToken.None);
+                Task timeoutTask = Task.Delay(timeout);
+                Task cancellationTask = Task.Delay(Timeout.Infinite, cancellationToken);
+                await Task.WhenAny(exitTask, timeoutTask, cancellationTask).ConfigureAwait(false);
 
-                if (completed != exitTask)
+                if (cancellationToken.IsCancellationRequested || !exitTask.IsCompleted)
                 {
                     bool cancelled = cancellationToken.IsCancellationRequested;
                     TryKill(process);
+                    await Task.WhenAll(exitTask, outputTask, errorTask).ConfigureAwait(false);
                     if (cancelled)
                         throw new OperationCanceledException(cancellationToken);
-                    return new ProcessResult(-1, await outputTask.ConfigureAwait(false), await errorTask.ConfigureAwait(false), true);
+                    return new ProcessResult(-1, outputTask.Result, errorTask.Result, true);
                 }
 
                 await Task.WhenAll(outputTask, errorTask).ConfigureAwait(false);

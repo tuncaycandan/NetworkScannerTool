@@ -7,6 +7,20 @@ using System.Threading.Tasks;
 
 namespace NetworkScannerTool
 {
+    internal sealed class UpdateDownloadProgress
+    {
+        public long BytesReceived { get; private set; }
+        public long? TotalBytes { get; private set; }
+        public bool IsVerifying { get; private set; }
+
+        public UpdateDownloadProgress(long bytesReceived, long? totalBytes, bool isVerifying)
+        {
+            BytesReceived = bytesReceived;
+            TotalBytes = totalBytes;
+            IsVerifying = isVerifying;
+        }
+    }
+
     internal sealed class SecureUpdateService
     {
         private readonly HttpClient client;
@@ -20,7 +34,12 @@ namespace NetworkScannerTool
             client.DefaultRequestHeaders.UserAgent.ParseAdd("NetworkScannerTool-Updater/1.0");
         }
 
-        public async Task<string> DownloadVerifiedPackageAsync(Uri packageUri, string expectedSha256, string destinationPath, CancellationToken cancellationToken)
+        public async Task<string> DownloadVerifiedPackageAsync(
+            Uri packageUri,
+            string expectedSha256,
+            string destinationPath,
+            CancellationToken cancellationToken,
+            IProgress<UpdateDownloadProgress> progress = null)
         {
             if (packageUri == null || packageUri.Scheme != Uri.UriSchemeHttps)
                 throw new ArgumentException("Update packages must be downloaded over HTTPS.", "packageUri");
@@ -46,7 +65,30 @@ namespace NetworkScannerTool
                     using (Stream input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                     using (FileStream output = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     {
-                        await input.CopyToAsync(output, 81920, cancellationToken).ConfigureAwait(false);
+                        long? totalBytes = response.Content.Headers.ContentLength;
+                        long bytesReceived = 0;
+                        byte[] buffer = new byte[81920];
+                        DateTime lastProgressReport = DateTime.UtcNow;
+                        int bytesRead;
+
+                        while ((bytesRead = await input.ReadAsync(
+                            buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
+                        {
+                            await output.WriteAsync(
+                                buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
+                            bytesReceived += bytesRead;
+
+                            if (progress != null &&
+                                (DateTime.UtcNow - lastProgressReport >= TimeSpan.FromMilliseconds(150) ||
+                                 (totalBytes.HasValue && bytesReceived >= totalBytes.Value)))
+                            {
+                                progress.Report(new UpdateDownloadProgress(bytesReceived, totalBytes, false));
+                                lastProgressReport = DateTime.UtcNow;
+                            }
+                        }
+
+                        if (progress != null)
+                            progress.Report(new UpdateDownloadProgress(bytesReceived, totalBytes, true));
                     }
                 }
 
