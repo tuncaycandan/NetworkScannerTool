@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<DeviceSignatures SchemaVersion="1" UpdatedUtc="2026-02-01">
+  <Signature Id="router-gateway" Type="Router / Gateway" Priority="100">
+	<Vendors>TP-LINK;TP LINK;UBIQUITI;MIKROTIK;CISCO;ARUBA;NETGEAR;ASUS;D-LINK;HUAWEI;ZYXEL;FIREWALL;FORTINET;PFSENSE;OPNSENSE</Vendors>
+	<Hostnames>ROUTER;GATEWAY;FIREWALL;AP;ACCESSPOINT;UNIFI;MIKROTIK;OPENWRT;DD-WRT</Hostnames>
+	<TcpPorts>22;23;53;80;443;8080;8443</TcpPorts>
+	<RequiredAny>53;80;443;8080;8443</RequiredAny>
+  </Signature>
+  <Signature Id="camera-nvr" Type="Camera / NVR" Priority="95">
+	<Vendors>HIKVISION;DAHUA;AXIS;VIVOTEK;UNIVIEW;HANGZHOU;AMCREST;REOLINK;IMOU;EZVIZ;WYZE;FOSCAM;HANWHA;HONEYWELL</Vendors>
+	<Hostnames>CAM;CAMERA;IPCAM;IPC;NVR;DVR;CCTV;SURVEILLANCE</Hostnames>
+	<TcpPorts>80;443;554;8000;8080;8899;34567;37777</TcpPorts>
+	<RequiredAny>554;8000;8899;34567;37777</RequiredAny>
+  </Signature>
+  <Signature Id="printer" Type="Printer" Priority="90">
+	<Vendors>HP;HEWLETT;EPSON;CANON;BROTHER;RICOH;KYOCERA;XEROX;LEXMARK;KONICA;OKI;ZEBRA</Vendors>
+	<Hostnames>PRINTER;PRINT;PRN;YAZICI;HP;EPSON;BROTHER;CANON</Hostnames>
+	<TcpPorts>80;443;515;631;9100</TcpPorts>
+	<RequiredAny>515;631;9100</RequiredAny>
+  </Signature>
+  <Signature Id="nas-file-server" Type="NAS / File Server" Priority="88">
+	<Vendors>SYNOLOGY;QNAP;ASUSTOR;BUFFALO;WESTERN DIGITAL;WD;NETAPP;FREENAS;TRUENAS;SEAGATE</Vendors>
+	<Hostnames>NAS;SYNOLOGY;QNAP;DISKSTATION;STORAGE;FILESERVER;FILE-SERVER</Hostnames>
+	<TcpPorts>22;80;443;139;445;548;2049;32400;8080</TcpPorts>
+	<RequiredAny>139;445;548;2049;32400</RequiredAny>
+  </Signature>
+  <Signature Id="windows-server" Type="Windows Server" Priority="86">
+	<Vendors>MICROSOFT;WINDOWS</Vendors>
+	<Hostnames>SERVER;SRV;DC;DOMAIN;EXCHANGE;SQL</Hostnames>
+	<TcpPorts>135;139;445;3389</TcpPorts>
+	<RequiredAny>135;139;445;3389</RequiredAny>
+	<RequiredAll>135;445</RequiredAll>
+  </Signature>
+  <Signature Id="windows-pc" Type="Windows PC" Priority="78">
+	<Vendors>MICROSOFT;WINDOWS</Vendors>
+	<Hostnames>DESKTOP-;LAPTOP-;WIN-;PC-;WORKSTATION</Hostnames>
+	<TcpPorts>135;139;445;3389</TcpPorts>
+	<RequiredAny>135;139;445;3389</RequiredAny>
+  </Signature>
+  <Signature Id="linux-server" Type="Linux Server" Priority="80">
+	<Vendors>DEBIAN;UBUNTU;RED HAT;REDHAT;CENTOS;ROCKY;ALMA;FEDORA;SUSE;LINUX</Vendors>
+	<Hostnames>LINUX;UBUNTU;DEBIAN;CENTOS;ROCKY;ALMA;SERVER;SRV</Hostnames>
+	<TcpPorts>22;80;443;2049</TcpPorts>
+	<RequiredAny>22;2049</RequiredAny>
+  </Signature>
+  <Signature Id="apple-device" Type="Mac / Apple Computer" Priority="76">
+	<Vendors>APPLE</Vendors>
+	<Hostnames>MACBOOK;IMAC;MAC-MINI;MACPRO;APPLE</Hostnames>
+	<TcpPorts>22;80;443;548;5000;7000</TcpPorts>
+	<RequiredAny>548;5000;7000</RequiredAny>
+  </Signature>
+  <Signature Id="android-device" Type="Android Device" Priority="70">
+	<Vendors>SAMSUNG;XIAOMI;HUAWEI;HONOR;ONEPLUS;OPPO;VIVO;GOOGLE;MOTOROLA;REALME;ANDROID</Vendors>
+	<Hostnames>ANDROID;PHONE;TABLET;GALAXY;PIXEL;REDMI;MI-</Hostnames>
+	<TcpPorts>80;443;5555;8008;8443</TcpPorts>
+	<RequiredAny>5555;8008;8443</RequiredAny>
+  </Signature>
+  <Signature Id="web-managed-device" Type="Web Managed Device" Priority="45">
+	<Vendors>HPE;DELL;LENOVO;INTEL;EMERSON;EATON;APC;SONOS;SQUEEZEBOX</Vendors>
+	<Hostnames>WEB;CONTROL;MANAGEMENT;IOT;SMART</Hostnames>
+	<TcpPorts>80;443;8080;8443</TcpPorts>
+	<RequiredAny>80;443;8080;8443</RequiredAny>
+  </Signature>
+  <Signature Id="ssh-device" Type="Linux / Unix Device" Priority="40">
+	<Vendors>OPENSSH;FREEBSD;UNIX;LINUX</Vendors>
+	<Hostnames>SSH;UNIX;FREEBSD;OPENWRT</Hostnames>
+	<TcpPorts>22</TcpPorts>
+	<RequiredAny>22</RequiredAny>
+  </Signature>
+  <Signature Id="rtsp-device" Type="RTSP Device" Priority="35">
+	<Hostnames>RTSP;MEDIA;STREAM;CAM</Hostnames>
+	<TcpPorts>554;8554</TcpPorts>
+	<RequiredAny>554;8554</RequiredAny>
+  </Signature>
+  <Signature Id="generic-web-device" Type="Web Managed Device" Priority="20">
+	<TcpPorts>80;443;8080;8443</TcpPorts>
+	<RequiredAny>80;443;8080;8443</RequiredAny>
+  </Signature>
+</DeviceSignatures>
