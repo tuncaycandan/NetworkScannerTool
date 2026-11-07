@@ -2,11 +2,11 @@
 
 Fast, lightweight, and practical network discovery and diagnostics tool for Windows. Network Scanner Tool scans IPv4 ranges, discovers responsive devices, and presents IP address, hostname, MAC address, vendor, device type, response time, network, open ports, shares, and scan history in a single desktop application.
 
-The application provides both **Türkçe** and **English** interfaces and is distributed as a standalone single executable. The current application version is **v1.5.2**.
+The application provides both **Türkçe** and **English** interfaces and is distributed as a standalone single executable. The current application version is **v1.5.3**.
 
 ## Download
 
-Download the latest release from the [Network Scanner Tool v1.5.2 release page][release]. The package contains `NetworkScannerTool.exe`; no installer is required.
+Download the latest release from the [Network Scanner Tool v1.5.3 release page][release]. The package contains `NetworkScannerTool.exe`; no installer is required.
 
 > The executable is intended for supported Windows systems with .NET Framework 4.8 available.
 
@@ -22,6 +22,7 @@ Download the latest release from the [Network Scanner Tool v1.5.2 release page][
 - Worker-pool based parallel scanning for large ranges.
 - Cancellation support and live progress reporting.
 - IP and network/adapter-aware result handling so records from multiple Ethernet networks are preserved.
+- Fast, Balanced, and Deep scan profiles for different speed and traffic preferences.
 
 ### Device information
 
@@ -37,6 +38,14 @@ The status area reports both counts, for example:
 ```
 
 The unique count represents grouped physical devices; the total count represents all discovered network records.
+
+### Device identification data
+
+- IEEE OUI data is stored in `data/oui.xml` for local vendor identification.
+- Device detection rules are stored in `data/device-signatures.xml`.
+- The application checks GitHub metadata at startup and downloads newer data only when required.
+- Cached data is stored under `%LocalAppData%\\NetworkScannerTool`.
+- If there is no Internet connection, cached or bundled XML data is used without interrupting the scan.
 
 ### Device list views
 
@@ -100,7 +109,7 @@ Screenshots are included in the repository:
 - English interface: `eng_ss.png`
 - Turkish interface: `tr_ss.png`
 
-![Network Scanner Tool - English](en_ss.png)
+![Network Scanner Tool - English](eng_ss.png)
 
 ![Network Scanner Tool - Turkish](tr_ss.png)
 
@@ -148,7 +157,9 @@ bin\Release\NetworkScannerTool.exe
 
 If no devices are discovered, verify that the selected adapter and IPv4 range are correct, that the target network is reachable, and that firewalls allow ICMP or the relevant diagnostic traffic. If a device is found without a MAC address, Windows may not have a usable ARP entry for that target or the network may not expose layer-2 information.
 
-If the update does not start, download the latest executable directly from the [v1.5.2 release page][release]. Do not delete a `.backup` file while an update is in progress; it is a recovery file and is removed automatically after successful startup.
+If the update does not start, download the latest executable directly from the [v1.5.3 release page][release]. Do not delete a `.backup` file while an update is in progress; it is a recovery file and is removed automatically after successful startup.
+
+For details about this release, see [RELEASE_NOTES_v1.5.3.md](RELEASE_NOTES_v1.5.3.md).
 
 ## Source code and contributions
 
@@ -162,6 +173,6 @@ Copyright © 2026 Tuncay Candan.
 
 ## References
 
-[release]: https://github.com/tuncaycandan/NetworkScannerTool/releases/tag/v1.5.2 "Network Scanner Tool v1.5.2"
+[release]: https://github.com/tuncaycandan/NetworkScannerTool/releases/tag/v1.5.3 "Network Scanner Tool v1.5.3"
 [issues]: https://github.com/tuncaycandan/NetworkScannerTool/issues "Network Scanner Tool Issues"
-[license]: https://github.com/tuncaycandan/NetworkScannerTool/blob/v1.5.2/LICENSE "Network Scanner Tool License"
+[license]: https://github.com/tuncaycandan/NetworkScannerTool/blob/v1.5.3/LICENSE "Network Scanner Tool License"

@@ -150,7 +150,10 @@ namespace NetworkScannerTool
                 var userText = new TextBox
                 {
                     Location = new Point(120, 59),
-                    Size = new Size(235, 24)
+                    Size = new Size(235, 24),
+                    AccessibleRole = AccessibleRole.Text,
+                    AccessibleName = T("Kullanıcı adı", "Username"),
+                    TabIndex = 0
                 };
 
                 var connectButton = new Button
@@ -158,7 +161,10 @@ namespace NetworkScannerTool
                     Text = T("Bağlan", "Connect"),
                     Location = new Point(165, 105),
                     Size = new Size(90, 30),
-                    DialogResult = DialogResult.OK
+                    DialogResult = DialogResult.OK,
+                    AccessibleRole = AccessibleRole.PushButton,
+                    AccessibleName = T("SSH bağlantısını başlat", "Start SSH connection"),
+                    TabIndex = 1
                 };
 
                 var cancelButton = new Button
@@ -166,7 +172,10 @@ namespace NetworkScannerTool
                     Text = T("İptal", "Cancel"),
                     Location = new Point(265, 105),
                     Size = new Size(90, 30),
-                    DialogResult = DialogResult.Cancel
+                    DialogResult = DialogResult.Cancel,
+                    AccessibleRole = AccessibleRole.PushButton,
+                    AccessibleName = T("İletişim penceresini kapat", "Close dialog"),
+                    TabIndex = 2
                 };
 
                 form.Controls.Add(ipLabel);
@@ -348,6 +357,7 @@ namespace NetworkScannerTool
         private readonly ComboBox historyFilterCombo = new ComboBox();
         private readonly LinkLabel footer = new LinkLabel();
         private readonly ComboBox deviceTypeFilter = new ComboBox();
+        private readonly ComboBox scanProfileCombo = new ComboBox();
         private readonly ComboBox inventoryScopeCombo = new ComboBox();
         private readonly ComboBox deviceStatusFilter = new ComboBox();
         private readonly Label deviceSearchLabel = new Label();
@@ -364,6 +374,7 @@ namespace NetworkScannerTool
         private readonly LinkLabel versionLink = new LinkLabel();
         private readonly Button logButton = new Button();
         private readonly NetworkScanService networkScanService;
+        private readonly DeviceSignatureStore deviceSignatureStore = new DeviceSignatureStore();
         private bool englishMode = false;
         private bool darkMode = false;
         private bool startupUpdateCheckDone = false;
@@ -584,9 +595,35 @@ namespace NetworkScannerTool
             exportButton.Text = T("HTML Rapor", "HTML Report");
             scanPortsButton.Text = T("Portları Tara", "Scan Ports");
             scanSharesButton.Text = T("Paylaşımları Tara", "Scan Shares");
+            scanPortsButton.AccessibleName = T("Seçili cihazın portlarını tara", "Scan ports on selected device");
+            scanSharesButton.AccessibleName = T("Seçili cihazın paylaşımlarını tara", "Scan shares on selected device");
+            var refreshButtonsForAccessibility = Controls.Find("refreshBtn", true);
+            if (refreshButtonsForAccessibility.Length > 0)
+                refreshButtonsForAccessibility[0].AccessibleName = T("Ağ bilgilerini yenile", "Refresh network information");
+            logButton.AccessibleName = T("Günlük klasörünü aç", "Open log folder");
+            int scanProfileIndex = Math.Max(0, scanProfileCombo.SelectedIndex);
+            scanProfileCombo.AccessibleName = T("Tarama profili", "Scan profile");
+            scanProfileCombo.Items.Clear();
+            scanProfileCombo.Items.Add(T("Hızlı", "Fast"));
+            scanProfileCombo.Items.Add(T("Dengeli", "Balanced"));
+            scanProfileCombo.Items.Add(T("Derin", "Deep"));
+            scanProfileCombo.SelectedIndex = Math.Min(scanProfileIndex, scanProfileCombo.Items.Count - 1);
+            deviceTypeFilter.AccessibleName = T("Cihaz türü filtresi", "Device type filter");
+            deviceViewCombo.AccessibleName = T("Cihaz görünümü", "Device view");
+            densityToggleButton.AccessibleName = T("Cihaz listesi yoğunluğunu değiştir", "Change device list density");
+            columnsButton.AccessibleName = T("Cihaz listesi sütunlarını seç", "Choose device list columns");
+            devices.AccessibleName = T("Bulunan cihazlar", "Discovered devices");
+            portsList.AccessibleName = T("Açık portlar", "Open ports");
+            sharesList.AccessibleName = T("Ağ paylaşımları", "Network shares");
+            historyList.AccessibleName = T("Cihaz geçmişi", "Device history");
+            adapterCombo.AccessibleName = T("Ağ adaptörü", "Network adapter");
+            scanAllCheck.AccessibleName = T("Tüm ağları tara", "Scan all networks");
+            scanButton.AccessibleName = T("Ağ taramasını başlat veya durdur", "Start or stop network scan");
+            exportButton.AccessibleName = T("HTML raporu dışa aktar", "Export HTML report");
+            rangeStart.AccessibleName = T("Başlangıç IP adresi veya CIDR aralığı", "Start IP address or CIDR range");
+            rangeEnd.AccessibleName = T("Bitiş IP adresi", "End IP address");
             deviceSearchLabel.Text = "\uE721";
             deviceSearchLabel.AccessibleName = T("Ara", "Search");
-            deviceSearchBox.AccessibleName = T("Cihazlarda ara", "Search devices");
             deviceSearchBox.AccessibleName = T("Cihazlarda hızlı ara", "Quick search in devices");
             int inventoryScopeIndex = inventoryScopeCombo.SelectedIndex;
             inventoryScopeCombo.Items.Clear();
@@ -834,10 +871,19 @@ namespace NetworkScannerTool
 
                 startupUpdateCheckDone = true;
 
-                await Task.Delay(3000);
+                try
+                {
+                    await Task.Delay(3000, formLifetimeCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
                 if (isClosing || IsDisposed || Disposing)
                     return;
                 await CheckForUpdatesAsync(true);
+                if (!isClosing && !IsDisposed && !Disposing)
+                    await RefreshDeviceSignaturesAsync();
             };
 
         }
@@ -851,6 +897,37 @@ namespace NetworkScannerTool
             if (portScanCts != null)
                 portScanCts.Cancel();
             formLifetimeCts.Cancel();
+        }
+
+        private async Task RefreshDeviceSignaturesAsync()
+        {
+            try
+            {
+                await deviceSignatureStore.RefreshAsync(formLifetimeCts.Token);
+                AppLogger.Info("Device signature update", "completed");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warning("Device signature update", ex.Message);
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                formLifetimeCts.Cancel();
+                formLifetimeCts.Dispose();
+                updateHttp.Dispose();
+                vendorHttp.Dispose();
+                deviceSignatureStore.Dispose();
+                secureUpdateService.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
 
         private void BuildUi()
@@ -868,6 +945,9 @@ namespace NetworkScannerTool
             adapterCombo.Location = new Point(55, 14);
             adapterCombo.Size = new Size(285, 24);
             adapterCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+            adapterCombo.AccessibleRole = AccessibleRole.ComboBox;
+            adapterCombo.AccessibleName = "Ağ adaptörü";
+            adapterCombo.TabIndex = 0;
             adapterCombo.SelectedIndexChanged += (s, e) => ApplySelectedAdapter();
             Controls.Add(adapterCombo);
 
@@ -884,6 +964,9 @@ namespace NetworkScannerTool
             scanAllCheck.TextAlign = ContentAlignment.MiddleLeft;
             scanAllCheck.FlatStyle = FlatStyle.Standard;
             scanAllCheck.UseVisualStyleBackColor = true;
+            scanAllCheck.AccessibleRole = AccessibleRole.CheckButton;
+            scanAllCheck.AccessibleName = "Tüm ağları tara";
+            scanAllCheck.TabIndex = 1;
             Controls.Add(scanAllCheck);
 
             scanButton.Text = "Tara";
@@ -900,6 +983,9 @@ namespace NetworkScannerTool
             scanButton.TextAlign = ContentAlignment.MiddleCenter;
             scanButton.UseCompatibleTextRendering = true;
             scanButton.Padding = new Padding(0, 0, 0, 1);
+            scanButton.AccessibleRole = AccessibleRole.PushButton;
+            scanButton.AccessibleName = "Ağ taramasını başlat veya durdur";
+            scanButton.TabIndex = 4;
             scanButton.Click += async (s, e) => await ScanButton_ClickAsync();
             Controls.Add(scanButton);
 
@@ -914,6 +1000,9 @@ namespace NetworkScannerTool
             exportButton.TextAlign = ContentAlignment.MiddleCenter;
             exportButton.UseCompatibleTextRendering = false;
             exportButton.Padding = new Padding(0, 0, 0, 0);
+            exportButton.AccessibleRole = AccessibleRole.PushButton;
+            exportButton.AccessibleName = "HTML raporu dışa aktar";
+            exportButton.TabIndex = 5;
             exportButton.Click += (s, e) => ExportHtmlReport();
             Controls.Add(exportButton);
 
@@ -924,6 +1013,9 @@ namespace NetworkScannerTool
             logButton.TextAlign = ContentAlignment.MiddleCenter;
             logButton.UseCompatibleTextRendering = true;
             logButton.Padding = new Padding(0, 0, 0, 1);
+            logButton.AccessibleRole = AccessibleRole.PushButton;
+            logButton.AccessibleName = T("Günlük klasörünü aç", "Open log folder");
+            logButton.TabIndex = 6;
             logButton.Click += (s, e) => OpenLogFolder();
             Controls.Add(logButton);
 
@@ -945,6 +1037,8 @@ namespace NetworkScannerTool
             rangeStart.Location = new Point(493, 46);
             rangeStart.Size = new Size(118, 24);
             rangeStart.Margin = new Padding(0);
+            rangeStart.AccessibleName = "Başlangıç IP adresi veya CIDR aralığı";
+            rangeStart.TabIndex = 2;
             rangeStart.Leave += (s, e) => UpdateRangeEndFromStart();
             rangeStart.KeyDown += RangeTextBox_KeyDown;
             Controls.Add(rangeStart);
@@ -955,6 +1049,8 @@ namespace NetworkScannerTool
             rangeEnd.Location = new Point(632, 46);
             rangeEnd.Size = new Size(118, 24);
             rangeEnd.Margin = new Padding(0);
+            rangeEnd.AccessibleName = "Bitiş IP adresi";
+            rangeEnd.TabIndex = 3;
             rangeEnd.KeyDown += RangeTextBox_KeyDown;
             Controls.Add(rangeEnd);
 
@@ -962,6 +1058,9 @@ namespace NetworkScannerTool
             refreshBtn.TextAlign = ContentAlignment.MiddleCenter;
             refreshBtn.UseCompatibleTextRendering = true;
             refreshBtn.Padding = new Padding(0, 0, 0, 1);
+            refreshBtn.AccessibleRole = AccessibleRole.PushButton;
+            refreshBtn.AccessibleName = T("Ağ bilgilerini yenile", "Refresh network information");
+            refreshBtn.TabIndex = 7;
             refreshBtn.Click += (s, e) => LoadAdapters();
             Controls.Add(refreshBtn);
 
@@ -1002,17 +1101,31 @@ namespace NetworkScannerTool
             {
                 Name = "typeFilterLabel",
                 Text = "Filtre:",
-                Location = new Point(18, 82),
+                Location = new Point(145, 82),
                 Size = new Size(40, 24),
                 Font = new Font(Font, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleLeft
             };
             Controls.Add(typeFilterLabel);
 
-            deviceTypeFilter.Location = new Point(60, 82);
-            deviceTypeFilter.Size = new Size(145, 24);
+            scanProfileCombo.Location = new Point(18, 82);
+            scanProfileCombo.Size = new Size(122, 24);
+            scanProfileCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+            scanProfileCombo.AccessibleRole = AccessibleRole.ComboBox;
+            scanProfileCombo.AccessibleName = T("Tarama profili", "Scan profile");
+            scanProfileCombo.Items.Add(T("Hızlı", "Fast"));
+            scanProfileCombo.Items.Add(T("Dengeli", "Balanced"));
+            scanProfileCombo.Items.Add(T("Derin", "Deep"));
+            scanProfileCombo.SelectedIndex = 1;
+            Controls.Add(scanProfileCombo);
+
+            deviceTypeFilter.Location = new Point(185, 82);
+            deviceTypeFilter.Size = new Size(120, 24);
             deviceTypeFilter.DropDownStyle = ComboBoxStyle.DropDownList;
             deviceTypeFilter.Enabled = false;
+            deviceTypeFilter.AccessibleRole = AccessibleRole.ComboBox;
+            deviceTypeFilter.AccessibleName = T("Cihaz türü filtresi", "Device type filter");
+            deviceTypeFilter.TabIndex = 8;
 
             deviceTypeFilter.Items.Clear();
             deviceTypeFilter.Items.Add(T("Tümü", "All"));
@@ -1022,7 +1135,7 @@ namespace NetworkScannerTool
 
             Controls.Add(deviceTypeFilter);
 
-            inventoryScopeCombo.Location = new Point(210, 82);
+            inventoryScopeCombo.Location = new Point(310, 82);
             inventoryScopeCombo.Size = new Size(135, 24);
             inventoryScopeCombo.DropDownStyle = ComboBoxStyle.DropDownList;
             inventoryScopeCombo.AccessibleName = T("Envanter görünümü", "Inventory view");
@@ -1032,10 +1145,12 @@ namespace NetworkScannerTool
             inventoryScopeCombo.SelectedIndexChanged += (s, e) => ApplyDeviceTypeFilter();
             Controls.Add(inventoryScopeCombo);
 
-            deviceStatusFilter.Location = new Point(350, 82);
+            deviceStatusFilter.Location = new Point(445, 82);
             deviceStatusFilter.Size = new Size(95, 24);
             deviceStatusFilter.DropDownStyle = ComboBoxStyle.DropDownList;
             deviceStatusFilter.AccessibleName = T("Cihaz durumu filtresi", "Device status filter");
+            deviceStatusFilter.AccessibleRole = AccessibleRole.ComboBox;
+            deviceStatusFilter.TabIndex = 9;
             deviceStatusFilter.Items.Add(T("Durum: Tümü", "Status: All"));
             deviceStatusFilter.Items.Add(T("Aktif", "Active"));
             deviceStatusFilter.Items.Add(T("Pasif", "Inactive"));
@@ -1096,23 +1211,28 @@ namespace NetworkScannerTool
 
             deviceSearchLabel.Text = "\uE721";
             deviceSearchLabel.AccessibleName = T("Ara", "Search");
-            deviceSearchLabel.Location = new Point(448, 82);
+            deviceSearchLabel.Location = new Point(520, 82);
             deviceSearchLabel.Size = new Size(30, 24);
             deviceSearchLabel.TextAlign = ContentAlignment.MiddleCenter;
             deviceSearchLabel.Font = new Font("Segoe MDL2 Assets", 11F, FontStyle.Regular);
             Controls.Add(deviceSearchLabel);
 
-            deviceSearchBox.Location = new Point(478, 82);
+            deviceSearchBox.Location = new Point(550, 82);
             deviceSearchBox.Size = new Size(165, 24);
             deviceSearchBox.BorderStyle = BorderStyle.FixedSingle;
             deviceSearchBox.Margin = new Padding(0);
             deviceSearchBox.TextChanged += (s, e) => ApplyDeviceTypeFilter();
             deviceSearchBox.AccessibleName = T("Cihazlarda ara", "Search devices");
+            deviceSearchBox.AccessibleRole = AccessibleRole.Text;
+            deviceSearchBox.TabIndex = 10;
             Controls.Add(deviceSearchBox);
 
             deviceViewCombo.Location = new Point(647, 82);
             deviceViewCombo.Size = new Size(55, 24);
             deviceViewCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+            deviceViewCombo.AccessibleRole = AccessibleRole.ComboBox;
+            deviceViewCombo.AccessibleName = T("Cihaz görünümü", "Device view");
+            deviceViewCombo.TabIndex = 11;
             deviceViewCombo.Items.Add("Liste");
             deviceViewCombo.Items.Add("Kart");
             deviceViewCombo.SelectedIndex = 0;
@@ -1132,6 +1252,9 @@ namespace NetworkScannerTool
             densityToggleButton.TextAlign = ContentAlignment.MiddleCenter;
             densityToggleButton.UseCompatibleTextRendering = true;
             densityToggleButton.Padding = new Padding(0, 0, 0, 0);
+            densityToggleButton.AccessibleRole = AccessibleRole.PushButton;
+            densityToggleButton.AccessibleName = T("Cihaz listesi yoğunluğunu değiştir", "Change device list density");
+            densityToggleButton.TabIndex = 12;
             densityToggleButton.Click += (s, e) => ToggleDeviceDensity();
             Controls.Add(densityToggleButton);
 
@@ -1144,6 +1267,9 @@ namespace NetworkScannerTool
             columnsButton.TextAlign = ContentAlignment.MiddleCenter;
             columnsButton.UseCompatibleTextRendering = true;
             columnsButton.Padding = new Padding(0, 0, 0, 0);
+            columnsButton.AccessibleRole = AccessibleRole.PushButton;
+            columnsButton.AccessibleName = T("Cihaz listesi sütunlarını seç", "Choose device list columns");
+            columnsButton.TabIndex = 13;
             columnsButton.Click += (s, e) => columnsMenu.Show(columnsButton, 0, columnsButton.Height);
             Controls.Add(columnsButton);
 
@@ -1153,6 +1279,9 @@ namespace NetworkScannerTool
             devices.FullRowSelect = true;
             devices.GridLines = true;
             devices.HideSelection = false;
+            devices.AccessibleRole = AccessibleRole.Table;
+            devices.AccessibleName = T("Bulunan cihazlar", "Discovered devices");
+            devices.TabIndex = 14;
             devices.Columns.Add("IP Adresi", 110);
             devices.Columns.Add("Hostname", 150);
             devices.Columns.Add("MAC Adresi", 140);
@@ -1222,6 +1351,9 @@ namespace NetworkScannerTool
             portsList.View = View.Details;
             portsList.GridLines = true;
             portsList.Scrollable = true;
+            portsList.AccessibleRole = AccessibleRole.Table;
+            portsList.AccessibleName = T("Açık portlar", "Open ports");
+            portsList.TabIndex = 0;
             portsList.Columns.Add("Port", 90);
             portsList.Columns.Add("Servis", 280);
             portsList.Columns.Add("Durum", 110);
@@ -1231,6 +1363,9 @@ namespace NetworkScannerTool
             scanPortsButton.Location = new Point(680, 12);
             scanPortsButton.Size = new Size(190, 32);
             scanPortsButton.Font = new Font(Font, FontStyle.Bold);
+            scanPortsButton.AccessibleRole = AccessibleRole.PushButton;
+            scanPortsButton.AccessibleName = T("Seçili cihazın portlarını tara", "Scan ports on selected device");
+            scanPortsButton.TabIndex = 16;
             scanPortsButton.Click += async (s, e) =>
             {
                 if (portScanCts != null)
@@ -1245,6 +1380,9 @@ namespace NetworkScannerTool
             sharesList.Size = new Size(650, 88);
             sharesList.View = View.Details;
             sharesList.GridLines = true;
+            sharesList.AccessibleRole = AccessibleRole.Table;
+            sharesList.AccessibleName = T("Ağ paylaşımları", "Network shares");
+            sharesList.TabIndex = 0;
             sharesList.Columns.Add("Paylaşım", 200);
             sharesList.Columns.Add("Tür", 120);
             sharesList.Columns.Add("Yol", 300);
@@ -1254,6 +1392,9 @@ namespace NetworkScannerTool
             scanSharesButton.Location = new Point(680, 12);
             scanSharesButton.Size = new Size(190, 30);
             scanSharesButton.Font = new Font(Font, FontStyle.Bold);
+            scanSharesButton.AccessibleRole = AccessibleRole.PushButton;
+            scanSharesButton.AccessibleName = T("Seçili cihazın paylaşımlarını tara", "Scan shares on selected device");
+            scanSharesButton.TabIndex = 17;
             scanSharesButton.Click += async (s, e) => await ScanSelectedSharesAsync();
             sharesTab.Controls.Add(scanSharesButton);
 
@@ -1261,6 +1402,8 @@ namespace NetworkScannerTool
             shareStatus.Size = new Size(220, 42);
             shareStatus.ForeColor = Color.DimGray;
             shareStatus.Text = T("Bir cihaz seçin.", "Select a device.");
+            shareStatus.AccessibleRole = AccessibleRole.StaticText;
+            shareStatus.AccessibleName = T("Paylaşım tarama durumu", "Share scan status");
             sharesTab.Controls.Add(shareStatus);
 
             var historyTab = new TabPage("Geçmiş");
@@ -1268,6 +1411,8 @@ namespace NetworkScannerTool
             historyFilterCombo.Size = new Size(196, 24);
             historyFilterCombo.DropDownStyle = ComboBoxStyle.DropDownList;
             historyFilterCombo.AccessibleName = T("Geçmiş olay filtresi", "History event filter");
+            historyFilterCombo.AccessibleRole = AccessibleRole.ComboBox;
+            historyFilterCombo.TabIndex = 0;
             historyFilterCombo.Items.Add(T("Tüm olaylar", "All events"));
             historyFilterCombo.Items.Add(T("IP değişiklikleri", "IP changes"));
             historyFilterCombo.Items.Add(T("MAC değişiklikleri", "MAC changes"));
@@ -1281,6 +1426,9 @@ namespace NetworkScannerTool
             historyList.Size = new Size(880, 82);
             historyList.View = View.Details;
             historyList.GridLines = true;
+            historyList.AccessibleRole = AccessibleRole.Table;
+            historyList.AccessibleName = T("Cihaz geçmişi", "Device history");
+            historyList.TabIndex = 19;
             historyList.Columns.Add("Tarih / Saat", 180);
             historyList.Columns.Add("Olay", 180);
             historyList.Columns.Add("Durum", 100);
@@ -1292,6 +1440,9 @@ namespace NetworkScannerTool
             bottomTabs.TabPages.Add(portsTab);
             bottomTabs.TabPages.Add(sharesTab);
             bottomTabs.TabPages.Add(historyTab);
+            bottomTabs.AccessibleRole = AccessibleRole.PageTabList;
+            bottomTabs.AccessibleName = T("Cihaz ayrıntıları", "Device details");
+            bottomTabs.TabIndex = 20;
             Controls.Add(bottomTabs);
 
             // Cihaz listesini genişletmek için alt paneli katla/aç.
@@ -1304,7 +1455,10 @@ namespace NetworkScannerTool
             toggleBottomPanelButton.FlatAppearance.BorderSize = 1;
             toggleBottomPanelButton.TextAlign = ContentAlignment.MiddleCenter;
             toggleBottomPanelButton.Cursor = Cursors.Hand;
-            toggleBottomPanelButton.TabStop = false;
+            toggleBottomPanelButton.AccessibleRole = AccessibleRole.PushButton;
+            toggleBottomPanelButton.AccessibleName = T("Alt ayrıntı panelini daralt", "Collapse details panel");
+            toggleBottomPanelButton.TabIndex = 15;
+            toggleBottomPanelButton.TabStop = true;
             toggleBottomPanelButton.Click += (s, e) => ToggleBottomPanel();
             Controls.Add(toggleBottomPanelButton);
             toggleBottomPanelButton.BringToFront();
@@ -1466,7 +1620,7 @@ namespace NetworkScannerTool
             int footerTop = ClientSize.Height - 41;
             ApplyBottomPanelLayout();
 
-            const int searchStart = 478;
+            const int searchStart = 550;
             int rightEdge = ClientSize.Width - 20;
             int languageLeft = rightEdge - languageCombo.Width;
             int themeLeft = languageLeft - 4 - themeCombo.Width;
@@ -1655,6 +1809,15 @@ namespace NetworkScannerTool
                             return;
                         }
 
+                        Uri updateUri;
+                        if (!Uri.TryCreate(downloadUrl, UriKind.Absolute, out updateUri) ||
+                            !IsTrustedUpdateHost(updateUri))
+                        {
+                            throw new InvalidDataException(
+                                T("Güncelleme adresi güvenilir bir GitHub adresi değil.",
+                                  "The update URL is not a trusted GitHub address."));
+                        }
+
                         DialogResult result = MessageBox.Show(
                             T(
                                 "Yeni sürüm bulundu.\r\n\r\nMevcut sürüm: v",
@@ -1729,6 +1892,17 @@ namespace NetworkScannerTool
             }
 
             return false;
+        }
+
+        private static bool IsTrustedUpdateHost(Uri uri)
+        {
+            if (uri == null || uri.Scheme != Uri.UriSchemeHttps)
+                return false;
+
+            string host = uri.Host.TrimEnd('.').ToLowerInvariant();
+            return host == "github.com" ||
+                   host == "objects.githubusercontent.com" ||
+                   host == "release-assets.githubusercontent.com";
         }
 
         private async Task DownloadAndInstallUpdateAsync(
@@ -3093,32 +3267,7 @@ namespace NetworkScannerTool
 
 
 
-        private const int MinConcurrentScans = 16;
-        private const int DefaultConcurrentScans = 40;
-        private const int MaxConcurrentScans = 96;
         private const int MaxScanTargets = 65536;
-
-        private static int CalculateConcurrentScans(int targetCount)
-        {
-            if (targetCount <= 0)
-                return MinConcurrentScans;
-
-            int cpuCount = Math.Max(1, Environment.ProcessorCount);
-            int cpuBasedLimit = Math.Max(MinConcurrentScans, cpuCount * 8);
-            int targetBasedLimit = targetCount <= 128
-                ? 24
-                : targetCount <= 1024
-                    ? DefaultConcurrentScans
-                    : 64;
-
-            return Math.Max(
-                1,
-                Math.Min(
-                    targetCount,
-                    Math.Min(
-                        MaxConcurrentScans,
-                        Math.Min(cpuBasedLimit, targetBasedLimit))));
-        }
         private const int MaxConcurrentDetailScans = 16;
         private static readonly SemaphoreSlim DetailScanLimiter =
             new SemaphoreSlim(MaxConcurrentDetailScans, MaxConcurrentDetailScans);
@@ -3276,6 +3425,7 @@ namespace NetworkScannerTool
                     : T("Taranmadı", "Not scanned");
                 knownDevice.Response = "-";
             }
+            var previousScanKeys = new HashSet<string>(scanResultKeys, StringComparer.OrdinalIgnoreCase);
             scanResultKeys.Clear();
             RebuildDeviceList();
             RefreshDeviceTypeFilterItems();
@@ -3290,7 +3440,12 @@ namespace NetworkScannerTool
             progress.Maximum = Math.Max(1, targets.Count);
             progressLabel.Text = "0 / " + targets.Count;
 
-            int dynamicWorkerCount = CalculateConcurrentScans(targets.Count);
+            ScanProfile selectedProfile = scanProfileCombo.SelectedIndex == 0
+                ? ScanProfile.Fast
+                : scanProfileCombo.SelectedIndex == 2
+                    ? ScanProfile.Deep
+                    : ScanProfile.Balanced;
+            int dynamicWorkerCount = ScanConcurrencyPolicy.Calculate(targets.Count, selectedProfile);
             statusLabel.Text =
                 T("Tarama başladı • ", "Scan started • ") +
                 dynamicWorkerCount +
@@ -3305,6 +3460,9 @@ namespace NetworkScannerTool
 
             int done = 0;
             int found = 0;
+            int newDevices = 0;
+            int changedDevices = 0;
+            int missingDevices = 0;
             Stopwatch scanStopwatch = Stopwatch.StartNew();
 
             try
@@ -3355,6 +3513,10 @@ namespace NetworkScannerTool
                                         {
                                             bool isNewDevice;
                                             DeviceInfo inventoryDevice = UpsertInventoryDevice(device, out isNewDevice);
+                                            if (isNewDevice)
+                                                newDevices++;
+                                            else if (!string.IsNullOrWhiteSpace(inventoryDevice.PendingHistoryEvent))
+                                                changedDevices++;
                                             AddHistory(inventoryDevice);
                                             if (isNewDevice)
                                                 AddDeviceRow(inventoryDevice);
@@ -3382,16 +3544,29 @@ namespace NetworkScannerTool
 
                 await Task.WhenAll(scanTasks);
 
+                missingDevices = MarkMissingDevices(previousScanKeys, scanScopeKeys);
                 hasCompletedScan = true;
                 SaveDeviceInventory();
                 statusLabel.Text = FormatDeviceCountMessage(scanResults, true);
-                AppLogger.Info("Network scan", "completed; devices=" + scanResults.Count);
+                AppLogger.Info(
+                    "Network scan",
+                    "completed; targets=" + targets.Count +
+                    "; workers=" + dynamicWorkerCount +
+                    "; devices=" + scanResults.Count +
+                    "; elapsedMs=" + (long)scanStopwatch.Elapsed.TotalMilliseconds);
 
                 exportButton.Enabled =
                     scanResults.Count > 0;
 
                 RefreshDeviceTypeFilterItems();
-                statusLabel.Text = FormatScanSummaryStatus(DateTime.Now, found, true, scanStopwatch.Elapsed);
+                statusLabel.Text = FormatScanSummaryStatus(
+                    DateTime.Now,
+                    found,
+                    true,
+                    scanStopwatch.Elapsed) +
+                    T(" • Yeni: ", " • New: ") + newDevices +
+                    T(" • Değişen: ", " • Changed: ") + changedDevices +
+                    T(" • Ulaşılamayan: ", " • Missing: ") + missingDevices;
             }
             catch (OperationCanceledException)
             {
@@ -3400,7 +3575,12 @@ namespace NetworkScannerTool
                     statusLabel.Text =
                         T("Tarama durduruldu • ", "Scan stopped • ") +
                         FormatDeviceCountMessage(scanResults, false);
-                AppLogger.Warning("Network scan", "cancelled; devices=" + scanResults.Count);
+                AppLogger.Warning(
+                    "Network scan",
+                    "cancelled; targets=" + targets.Count +
+                    "; workers=" + dynamicWorkerCount +
+                    "; devices=" + scanResults.Count +
+                    "; elapsedMs=" + (long)scanStopwatch.Elapsed.TotalMilliseconds);
 
                 if (!isClosing && !IsDisposed && !Disposing)
                 {
@@ -3414,7 +3594,12 @@ namespace NetworkScannerTool
             {
                 scanStopwatch.Stop();
                 SaveDeviceInventory();
-                AppLogger.Error("Network scan", "failed after " + found + " device(s)", ex);
+                AppLogger.Error(
+                    "Network scan",
+                    "failed after " + found + " device(s); targets=" + targets.Count +
+                    "; workers=" + dynamicWorkerCount +
+                    "; elapsedMs=" + (long)scanStopwatch.Elapsed.TotalMilliseconds,
+                    ex);
 
                 if (!isClosing && !IsDisposed && !Disposing)
                 {
@@ -3758,6 +3943,45 @@ namespace NetworkScannerTool
             bool dahuaPort = p37777.Result;
             bool dvrPort = p34567.Result;
             bool camPort = p8899.Result;
+
+            string signatureDeviceType;
+            if (deviceSignatureStore.TryGetDeviceType(
+                vendor,
+                hostname,
+                new[]
+                {
+                    22, 23, 53, 80, 135, 139, 443, 445, 515, 548, 554,
+                    631, 3389, 5900, 8000, 8080, 8443, 8554, 8899,
+                    9100, 2049, 32400, 34567, 37777
+                }.Where(port =>
+                    (port == 22 && ssh) ||
+                    (port == 23 && telnet) ||
+                    (port == 53 && dns) ||
+                    (port == 80 && http) ||
+                    (port == 135 && rpc) ||
+                    (port == 139 && netbios) ||
+                    (port == 443 && https) ||
+                    (port == 445 && smb) ||
+                    (port == 515 && lpd) ||
+                    (port == 548 && afp) ||
+                    (port == 554 && rtsp) ||
+                    (port == 631 && ipp) ||
+                    (port == 3389 && rdp) ||
+                    (port == 5900 && vnc) ||
+                    (port == 8000 && hikPort) ||
+                    (port == 8080 && httpAlt) ||
+                    (port == 8443 && httpsAlt) ||
+                    (port == 8899 && camPort) ||
+                    (port == 9100 && printer) ||
+                    (port == 2049 && nfs) ||
+                    (port == 32400 && plex) ||
+                    (port == 34567 && dvrPort) ||
+                    (port == 37777 && dahuaPort))
+                .ToArray(),
+                out signatureDeviceType))
+            {
+                return T(signatureDeviceType, signatureDeviceType);
+            }
 
             // ---------------------------------------
             // 3. KAMERA / NVR
@@ -6438,6 +6662,13 @@ namespace NetworkScannerTool
             if (vendorCache.TryGetValue(oui, out cached))
                 return LocalizeValue(cached);
 
+            string localVendor;
+            if (deviceSignatureStore.TryGetVendor(oui, out localVendor))
+            {
+                vendorCache[oui] = localVendor;
+                return LocalizeValue(localVendor);
+            }
+
             // Ekrandaki cihazlarda doğruladığımız ve sık kullanılan bazı kayıtlar.
             // Ağ olmasa bile bunlar bulunur.
             var localMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -6470,7 +6701,6 @@ namespace NetworkScannerTool
                 ["B827EB"] = "Raspberry Pi"
             };
 
-            string localVendor;
             if (localMap.TryGetValue(oui, out localVendor))
             {
                 vendorCache[oui] = localVendor;
@@ -6828,6 +7058,32 @@ namespace NetworkScannerTool
                 if (ReferenceEquals(GetSelectedDevice(), device))
                     UpdateDeviceInfoText(device);
             }
+        }
+
+        private int MarkMissingDevices(
+            HashSet<string> previousScanKeys,
+            HashSet<string> scanScopeKeys)
+        {
+            int missing = 0;
+            foreach (DeviceInfo device in scanResults)
+            {
+                string key = GetScanResultKey(device);
+                if (!scanScopeKeys.Contains(key) ||
+                    !previousScanKeys.Contains(key) ||
+                    device.WasInLastScan)
+                    continue;
+
+                device.Status = T("Pasif", "Inactive");
+                device.Response = "-";
+                device.PendingHistoryEvent = T("Cihaz erişilemez oldu", "Device became unreachable");
+                AddHistory(device);
+                missing++;
+            }
+
+            if (missing > 0)
+                RebuildDeviceList();
+
+            return missing;
         }
 
         private void AddHistory(DeviceInfo d)
